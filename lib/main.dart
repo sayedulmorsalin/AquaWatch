@@ -1,5 +1,4 @@
-
-import 'package:aquawatch/morsalin/data_entry.dart';
+import 'package:aquawatch/home.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -13,7 +12,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: DataEntry(),
+      home: const HomePage(),
     );
   }
 }

@@ -46,14 +46,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFF032B43),
-              Color(0xFF065A82),
-              Color(0xFF1C7293),
+            colors: [
+              Colors.blue.shade900,
+              Colors.blue.shade600,
+              Colors.cyan.shade400,
             ],
           ),
         ),
@@ -166,11 +166,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                                     color: Colors.white.withValues(alpha: 0.85),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.white.withValues(alpha: 0.12),
+                                  fillColor: Colors.white.withValues(
+                                    alpha: 0.12,
+                                  ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
                                     borderSide: BorderSide(
-                                      color: Colors.white.withValues(alpha: 0.35),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.35,
+                                      ),
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
@@ -215,8 +219,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(
-                                  onPressed:
-                                      _isLoading ? null : _onSendResetLink,
+                                  onPressed: _isLoading
+                                      ? null
+                                      : _onSendResetLink,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.white,
                                     foregroundColor: const Color(0xFF003049),
@@ -253,7 +258,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                                   child: Text(
                                     'Back to Login',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.9),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -273,10 +280,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 }
 
 class _SuccessView extends StatelessWidget {
-  const _SuccessView({
-    required this.email,
-    required this.onBackToLogin,
-  });
+  const _SuccessView({required this.email, required this.onBackToLogin});
 
   final String email;
   final VoidCallback onBackToLogin;
@@ -339,10 +343,7 @@ class _SuccessView extends StatelessWidget {
             ),
             child: const Text(
               'Back to Login',
-              style: TextStyle(
-                fontSize: 15.5,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
             ),
           ),
         ),
