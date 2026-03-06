@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:aquawatch/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -10,6 +12,7 @@ class ForgotPasswordPage extends StatefulWidget {
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _authService = AuthService();
   bool _isLoading = false;
   bool _isSubmitted = false;
 
@@ -30,14 +33,36 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       _isLoading = true;
     });
 
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-      _isSubmitted = true;
-    });
+    try {
+      await _authService.sendPasswordResetEmail(email: _emailController.text);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isSubmitted = true;
+      });
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_authService.readableAuthError(e)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
