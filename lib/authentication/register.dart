@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
+import 'package:aquawatch/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -26,6 +28,7 @@ class _RegisterState extends State<Register>
   bool _isPasswordHidden = true;
   bool _isConfirmPasswordHidden = true;
   bool _isLoading = false;
+  final _authService = AuthService();
 
   @override
   void initState() {
@@ -59,7 +62,7 @@ class _RegisterState extends State<Register>
     super.dispose();
   }
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
     if (_nameController.text.isEmpty ||
         _phoneController.text.isEmpty ||
         _addressController.text.isEmpty ||
@@ -86,8 +89,15 @@ class _RegisterState extends State<Register>
     }
 
     setState(() => _isLoading = true);
-
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      await _authService.registerWithProfile(
+        name: _nameController.text,
+        phone: _phoneController.text,
+        address: _addressController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -95,7 +105,26 @@ class _RegisterState extends State<Register>
           backgroundColor: Colors.green,
         ),
       );
-    });
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_authService.readableAuthError(e)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override

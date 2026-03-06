@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/authentication/forgot_pass.dart';
+import 'package:aquawatch/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -20,6 +22,7 @@ class _LoginPageState extends State<LoginPage>
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
+  final _authService = AuthService();
 
   @override
   void initState() {
@@ -49,7 +52,7 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -61,8 +64,12 @@ class _LoginPageState extends State<LoginPage>
     }
 
     setState(() => _isLoading = true);
-
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      await _authService.signIn(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -70,7 +77,26 @@ class _LoginPageState extends State<LoginPage>
           backgroundColor: Colors.green,
         ),
       );
-    });
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_authService.readableAuthError(e)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
