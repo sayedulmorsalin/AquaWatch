@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
 import 'package:aquawatch/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,18 +16,18 @@ class _RegisterState extends State<Register>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Form controllers
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authorityCodeController = TextEditingController();
 
-  // Password visibility states
   bool _isPasswordHidden = true;
   bool _isConfirmPasswordHidden = true;
   bool _isLoading = false;
+  String _selectedUserType = 'User';
   final _authService = AuthService();
 
   @override
@@ -59,6 +59,7 @@ class _RegisterState extends State<Register>
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _authorityCodeController.dispose();
     super.dispose();
   }
 
@@ -88,15 +89,26 @@ class _RegisterState extends State<Register>
       return;
     }
 
+    if (_selectedUserType == 'Authority' &&
+        _authorityCodeController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the authority verification code'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await _authService.registerWithProfile(
-        userRole: "",
         name: _nameController.text,
         phone: _phoneController.text,
         address: _addressController.text,
         email: _emailController.text,
         password: _passwordController.text,
+        userRole: _selectedUserType,
       );
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -106,7 +118,10 @@ class _RegisterState extends State<Register>
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -149,7 +164,6 @@ class _RegisterState extends State<Register>
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Column(
                 children: [
-                  // Back Button
                   Align(
                     alignment: Alignment.topLeft,
                     child: GestureDetector(
@@ -157,7 +171,7 @@ class _RegisterState extends State<Register>
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(Icons.arrow_back, color: Colors.white),
@@ -195,7 +209,7 @@ class _RegisterState extends State<Register>
                                   height: 80,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     border: Border.all(
                                       color: Colors.white,
                                       width: 2,
@@ -221,7 +235,7 @@ class _RegisterState extends State<Register>
                                   'Create Your Account',
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                   ),
                                 ),
                               ],
@@ -235,14 +249,25 @@ class _RegisterState extends State<Register>
                             position: _slideAnimation,
                             child: Column(
                               children: [
-                                // Name Field
+                                _buildUserTypeDropdown(),
+                                const SizedBox(height: 16),
+                                if (_selectedUserType == 'Authority')
+                                  Column(
+                                    children: [
+                                      _buildTextField(
+                                        controller: _authorityCodeController,
+                                        label: 'Authority Verification Code',
+                                        icon: Icons.verified_user_outlined,
+                                      ),
+                                      const SizedBox(height: 16),
+                                    ],
+                                  ),
                                 _buildTextField(
                                   controller: _nameController,
                                   label: 'Full Name',
                                   icon: Icons.person_outline,
                                 ),
                                 const SizedBox(height: 16),
-                                // Email Field
                                 _buildTextField(
                                   controller: _emailController,
                                   label: 'Email Address',
@@ -250,7 +275,6 @@ class _RegisterState extends State<Register>
                                   keyboardType: TextInputType.emailAddress,
                                 ),
                                 const SizedBox(height: 16),
-                                // Phone Field
                                 _buildTextField(
                                   controller: _phoneController,
                                   label: 'Phone Number',
@@ -258,43 +282,38 @@ class _RegisterState extends State<Register>
                                   keyboardType: TextInputType.phone,
                                 ),
                                 const SizedBox(height: 16),
-                                // Address Field
                                 _buildTextField(
                                   controller: _addressController,
                                   label: 'Address',
                                   icon: Icons.location_on_outlined,
                                 ),
                                 const SizedBox(height: 16),
-                                // Password Field
                                 _buildPasswordTextField(
                                   controller: _passwordController,
                                   label: 'Password',
                                   isObscure: _isPasswordHidden,
                                   toggleVisibility: () {
                                     setState(
-                                          () => _isPasswordHidden =
-                                      !_isPasswordHidden,
+                                      () => _isPasswordHidden =
+                                          !_isPasswordHidden,
                                     );
                                   },
                                 ),
                                 const SizedBox(height: 16),
-                                // Confirm Password Field
                                 _buildPasswordTextField(
                                   controller: _confirmPasswordController,
                                   label: 'Confirm Password',
                                   isObscure: _isConfirmPasswordHidden,
                                   toggleVisibility: () {
                                     setState(
-                                          () => _isConfirmPasswordHidden =
-                                      !_isConfirmPasswordHidden,
+                                      () => _isConfirmPasswordHidden =
+                                          !_isConfirmPasswordHidden,
                                     );
                                   },
                                 ),
                                 const SizedBox(height: 28),
-                                // Register Button
                                 _buildRegisterButton(),
                                 const SizedBox(height: 16),
-                                // Login Link
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -307,11 +326,11 @@ class _RegisterState extends State<Register>
                                     ),
                                     TextButton(
                                       onPressed: () {
-                                        Navigator.push(
+                                        Navigator.pushReplacement(
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
-                                            const LoginPage(),
+                                                const LoginPage(),
                                           ),
                                         );
                                       },
@@ -410,6 +429,45 @@ class _RegisterState extends State<Register>
     );
   }
 
+  Widget _buildUserTypeDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+      ),
+      child: DropdownButtonFormField<String>(
+        value: _selectedUserType,
+        dropdownColor: Colors.blue.shade900,
+        icon: Icon(
+          Icons.arrow_drop_down,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+        decoration: InputDecoration(
+          prefixIcon: Icon(
+            Icons.people_outline,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+        ),
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        items: const [
+          DropdownMenuItem(value: 'User', child: Text('User')),
+          DropdownMenuItem(value: 'Authority', child: Text('Authority')),
+        ],
+        onChanged: (value) {
+          if (value != null) {
+            setState(() => _selectedUserType = value);
+          }
+        },
+      ),
+    );
+  }
+
   Widget _buildRegisterButton() {
     return Container(
       width: double.infinity,
@@ -419,7 +477,7 @@ class _RegisterState extends State<Register>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -432,27 +490,29 @@ class _RegisterState extends State<Register>
           borderRadius: BorderRadius.circular(12),
           child: _isLoading
               ? const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-              ),
-            ),
-          )
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                  ),
+                )
               : const Center(
-            child: Text(
-              'Create Account',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-          ),
+                  child: Text(
+                    'Create Account',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
         ),
       ),
     );
   }
+
+  //chcek git
 }
