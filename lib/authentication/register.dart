@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
 import 'package:aquawatch/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -91,6 +91,7 @@ class _RegisterState extends State<Register>
     setState(() => _isLoading = true);
     try {
       await _authService.registerWithProfile(
+        userRole: "",
         name: _nameController.text,
         phone: _phoneController.text,
         address: _addressController.text,
@@ -271,8 +272,8 @@ class _RegisterState extends State<Register>
                                   isObscure: _isPasswordHidden,
                                   toggleVisibility: () {
                                     setState(
-                                      () => _isPasswordHidden =
-                                          !_isPasswordHidden,
+                                          () => _isPasswordHidden =
+                                      !_isPasswordHidden,
                                     );
                                   },
                                 ),
@@ -284,8 +285,8 @@ class _RegisterState extends State<Register>
                                   isObscure: _isConfirmPasswordHidden,
                                   toggleVisibility: () {
                                     setState(
-                                      () => _isConfirmPasswordHidden =
-                                          !_isConfirmPasswordHidden,
+                                          () => _isConfirmPasswordHidden =
+                                      !_isConfirmPasswordHidden,
                                     );
                                   },
                                 ),
@@ -310,7 +311,7 @@ class _RegisterState extends State<Register>
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
-                                                const LoginPage(),
+                                            const LoginPage(),
                                           ),
                                         );
                                       },
@@ -431,25 +432,25 @@ class _RegisterState extends State<Register>
           borderRadius: BorderRadius.circular(12),
           child: _isLoading
               ? const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                  ),
-                )
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+            ),
+          )
               : const Center(
-                  child: Text(
-                    'Create Account',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
+            child: Text(
+              'Create Account',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
+          ),
         ),
       ),
     );

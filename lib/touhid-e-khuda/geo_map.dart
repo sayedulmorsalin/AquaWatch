@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'dart:math';
 
 class GeoMap extends StatefulWidget {
   const GeoMap({super.key});
@@ -10,18 +9,24 @@ class GeoMap extends StatefulWidget {
   State<GeoMap> createState() => _GeoMapState();
 }
 
-class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
+  late AnimationController _panelController;
+  late Animation<double> _panelSlide;
+  late MapController _mapController;
 
   final _searchController = TextEditingController();
   String _selectedFilter = 'All';
-  List<Map<String, dynamic>> _waterLocations = [
+  bool _panelExpanded = false;
+  int? _selectedStationIndex;
+
+  final List<Map<String, dynamic>> _waterStations = [
     {
       'name': 'River Station A',
-      'location': 'Downtown Area',
+      'area': 'Downtown Area',
       'ph': 7.2,
       'tds': 450,
+      'ec': 720,
+      'salinity': 0.4,
       'temperature': 22,
       'status': 'Good',
       'lat': 23.8103,
@@ -29,9 +34,11 @@ class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
     },
     {
       'name': 'Lake Station B',
-      'location': 'North Region',
+      'area': 'North Region',
       'ph': 6.8,
       'tds': 320,
+      'ec': 510,
+      'salinity': 0.3,
       'temperature': 24,
       'status': 'Excellent',
       'lat': 23.8500,
@@ -39,9 +46,11 @@ class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
     },
     {
       'name': 'Pond Station C',
-      'location': 'South Region',
+      'area': 'South Region',
       'ph': 7.5,
       'tds': 680,
+      'ec': 1100,
+      'salinity': 1.8,
       'temperature': 26,
       'status': 'Fair',
       'lat': 23.7500,
@@ -49,9 +58,11 @@ class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
     },
     {
       'name': 'Canal Station D',
-      'location': 'East Region',
+      'area': 'East Region',
       'ph': 6.5,
       'tds': 280,
+      'ec': 440,
+      'salinity': 0.2,
       'temperature': 21,
       'status': 'Excellent',
       'lat': 23.8200,
@@ -59,623 +70,857 @@ class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
     },
   ];
 
-  List<Map<String, dynamic>> _filteredLocations = [];
-
-  // --- map state for Bangladesh ---
-  List<Marker> _markers = [];
-  Color _bangladeshColor = Colors.green.withOpacity(0.4);
-  final List<LatLng> _bangladeshBoundary = [
-    LatLng(22.0, 88.0),
-    LatLng(26.5, 88.0),
-    LatLng(26.5, 92.5),
-    LatLng(22.0, 92.5),
-  ];
-
-  void _toggleBangladeshColor() {
-    setState(() {
-      _bangladeshColor = _bangladeshColor == Colors.green.withOpacity(0.4)
-          ? Colors.red.withOpacity(0.4)
-          : Colors.green.withOpacity(0.4);
-    });
-  }
-
-  void _addMarker(LatLng point) {
-    setState(() {
-      _markers.add(
-        Marker(
-          point: point,
-          builder: (ctx) =>
-              const Icon(Icons.location_on, color: Colors.yellow, size: 40),
-        ),
-      );
-    });
-  }
+  late List<Map<String, dynamic>> _filtered;
 
   @override
   void initState() {
     super.initState();
-    _filteredLocations = _waterLocations;
+    _filtered = List.of(_waterStations);
+    _mapController = MapController();
 
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    _panelController = AnimationController(
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    _panelSlide = CurvedAnimation(
+      parent: _panelController,
+      curve: Curves.easeOutCubic,
     );
-
-    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _panelController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _filterLocations(String query) {
+  void _applyFilters() {
+    final query = _searchController.text.toLowerCase();
     setState(() {
-      if (query.isEmpty) {
-        _filteredLocations = _waterLocations;
-      } else {
-        _filteredLocations = _waterLocations
-            .where(
-              (location) =>
-                  location['name'].toString().toLowerCase().contains(
-                    query.toLowerCase(),
-                  ) ||
-                  location['location'].toString().toLowerCase().contains(
-                    query.toLowerCase(),
-                  ),
-            )
-            .toList();
-      }
+      _filtered = _waterStations.where((s) {
+        final matchesStatus =
+            _selectedFilter == 'All' || s['status'] == _selectedFilter;
+        final matchesQuery =
+            query.isEmpty ||
+            s['name'].toString().toLowerCase().contains(query) ||
+            s['area'].toString().toLowerCase().contains(query);
+        return matchesStatus && matchesQuery;
+      }).toList();
     });
   }
 
-  void _filterByStatus(String status) {
-    setState(() {
-      _selectedFilter = status;
-      if (status == 'All') {
-        _filteredLocations = _waterLocations;
-      } else {
-        _filteredLocations = _waterLocations
-            .where((location) => location['status'] == status)
-            .toList();
-      }
-    });
+  void _selectFilter(String status) {
+    _selectedFilter = status;
+    _applyFilters();
   }
 
-  Color _getStatusColor(String status) {
+  Color _statusColor(String status) {
     switch (status) {
       case 'Excellent':
-        return Colors.green;
+        return const Color(0xFF00E676);
       case 'Good':
-        return Colors.blue;
+        return const Color(0xFF29B6F6);
       case 'Fair':
-        return Colors.orange;
+        return const Color(0xFFFFA726);
       case 'Poor':
-        return Colors.red;
+        return const Color(0xFFFF5252);
       default:
         return Colors.grey;
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'Excellent':
+        return Icons.verified_rounded;
+      case 'Good':
+        return Icons.thumb_up_alt_rounded;
+      case 'Fair':
+        return Icons.info_rounded;
+      case 'Poor':
+        return Icons.warning_amber_rounded;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  void _flyTo(double lat, double lng) {
+    _mapController.move(LatLng(lat, lng), 13);
+  }
+
+  void _togglePanel() {
+    setState(() => _panelExpanded = !_panelExpanded);
+    if (_panelExpanded) {
+      _panelController.forward();
+    } else {
+      _panelController.reverse();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.blue.shade900,
-              Colors.blue.shade600,
-              Colors.cyan.shade400,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Back Button
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                  ),
+      body: Stack(
+        children: [
+          _buildMap(),
+
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 140,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0D1B2A).withValues(alpha: 0.92),
+                    const Color(0xFF0D1B2A).withValues(alpha: 0.0),
+                  ],
                 ),
               ),
-              // Header Section
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.2),
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.location_on,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Column(
+            ),
+          ),
+
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        _buildCircleButton(
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Water Monitoring Map',
                                 style: TextStyle(
-                                  fontSize: 24,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
+                                  letterSpacing: 0.3,
                                 ),
                               ),
+                              SizedBox(height: 2),
                               Text(
-                                '${_filteredLocations.length} stations available',
+                                'Tap a marker for details',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withOpacity(0.7),
+                                  fontSize: 11,
+                                  color: Colors.white54,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Search Bar
-                      _buildSearchBar(),
-                    ],
-                  ),
-                ),
-              ),
-              // Filter Chips
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip('All'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip('Excellent'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip('Good'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip('Fair'),
+                        ),
+                        _buildCircleButton(
+                          icon: _panelExpanded
+                              ? Icons.map_rounded
+                              : Icons.list_rounded,
+                          onTap: _togglePanel,
+                        ),
                       ],
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Bangladesh map view (tappable to add icons & toggle area color)
-              SizedBox(
-                height: 250,
-                child: Stack(
-                  children: [
-                    FlutterMap(
-                      options: MapOptions(
-                        center: LatLng(23.8103, 90.4125),
-                        zoom: 7.0,
-                        onTap: (tapPos, latlng) => _addMarker(latlng),
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                          subdomains: const ['a', 'b', 'c'],
-                        ),
-                        PolygonLayer(
-                          polygons: [
-                            Polygon(
-                              points: _bangladeshBoundary,
-                              color: _bangladeshColor,
-                              borderColor: Colors.black,
-                              borderStrokeWidth: 1,
-                            ),
-                          ],
-                        ),
-                        MarkerLayer(markers: _markers),
-                      ],
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Column(
-                        children: [
-                          ElevatedButton(
-                            onPressed: _toggleBangladeshColor,
-                            child: const Text('Toggle Area Color'),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              final random = Random();
-                              final lat = 22.0 + random.nextDouble() * 4.5;
-                              final lng = 88.0 + random.nextDouble() * 4.5;
-                              _addMarker(LatLng(lat, lng));
-                            },
-                            child: const Text('Add Icon'),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 10),
+                    _buildSearchBar(),
+                    const SizedBox(height: 8),
+                    _buildFilterRow(),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              // Locations List
-              Expanded(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: _filteredLocations.isEmpty
+            ),
+          ),
+
+          _buildBottomPanel(),
+
+          Positioned(
+            bottom: _panelExpanded ? null : 24,
+            top: _panelExpanded ? null : null,
+            left: 0,
+            right: 0,
+            child: _panelExpanded
+                ? const SizedBox.shrink()
+                : Center(
+                    child: GestureDetector(
+                      onTap: _togglePanel,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D1B2A).withValues(alpha: 0.88),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.15),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.water_drop_rounded,
+                              color: Colors.cyanAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_filtered.length} station${_filtered.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMap() {
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        center: LatLng(23.81, 90.38),
+        zoom: 10,
+        maxZoom: 18,
+        minZoom: 5,
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.example.aquawatch',
+        ),
+        PolygonLayer(
+          polygons: [
+            Polygon(
+              points: [
+                LatLng(22.0, 88.0),
+                LatLng(26.5, 88.0),
+                LatLng(26.5, 92.5),
+                LatLng(22.0, 92.5),
+              ],
+              color: Colors.cyan.withValues(alpha: 0.08),
+              borderColor: Colors.cyanAccent.withValues(alpha: 0.35),
+              borderStrokeWidth: 1.5,
+            ),
+          ],
+        ),
+        MarkerLayer(
+          markers: _filtered.asMap().entries.map((entry) {
+            final i = entry.key;
+            final s = entry.value;
+            final color = _statusColor(s['status']);
+            final isSelected = _selectedStationIndex == i;
+
+            return Marker(
+              point: LatLng(s['lat'], s['lng']),
+              width: isSelected ? 52 : 44,
+              height: isSelected ? 52 : 44,
+              builder: (ctx) => GestureDetector(
+                onTap: () {
+                  setState(() => _selectedStationIndex = i);
+                  _showStationSheet(s);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: isSelected ? 0.35 : 0.2),
+                    border: Border.all(color: color, width: isSelected ? 3 : 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.5),
+                        blurRadius: isSelected ? 14 : 8,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.water_drop_rounded,
+                    color: color,
+                    size: isSelected ? 24 : 20,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1B2A).withValues(alpha: 0.7),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1B2A).withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (_) => _applyFilters(),
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search stations...',
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: Colors.white.withValues(alpha: 0.5),
+            size: 20,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    _searchController.clear();
+                    _applyFilters();
+                  },
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white.withValues(alpha: 0.5),
+                    size: 18,
+                  ),
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterRow() {
+    const filters = ['All', 'Excellent', 'Good', 'Fair'];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: filters.map((f) {
+          final selected = _selectedFilter == f;
+          final color = f == 'All' ? Colors.cyanAccent : _statusColor(f);
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => _selectFilter(f),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? color.withValues(alpha: 0.2)
+                      : const Color(0xFF0D1B2A).withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? color : Colors.white.withValues(alpha: 0.1),
+                    width: selected ? 1.5 : 1,
+                  ),
+                ),
+                child: Text(
+                  f,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? color : Colors.white60,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildBottomPanel() {
+    return AnimatedBuilder(
+      animation: _panelSlide,
+      builder: (context, child) {
+        final panelHeight =
+            MediaQuery.of(context).size.height * 0.48 * _panelSlide.value;
+        if (panelHeight <= 0) return const SizedBox.shrink();
+
+        return Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: panelHeight,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D1B2A).withValues(alpha: 0.94),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 24,
+                  offset: const Offset(0, -8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: _togglePanel,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${_filtered.length} Station${_filtered.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _togglePanel,
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: _filtered.isEmpty
                       ? Center(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.location_off,
-                                size: 64,
-                                color: Colors.white.withOpacity(0.5),
+                                Icons.location_off_rounded,
+                                size: 40,
+                                color: Colors.white.withValues(alpha: 0.3),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 8),
                               Text(
                                 'No stations found',
                                 style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.4),
                                 ),
                               ),
                             ],
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          itemCount: _filteredLocations.length,
-                          itemBuilder: (context, index) {
-                            return _buildLocationCard(
-                              _filteredLocations[index],
-                            );
-                          },
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: _filtered.length,
+                          itemBuilder: (_, i) =>
+                              _buildStationTile(_filtered[i], i),
                         ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  InputDecoration _commonDecoration({
-    required String hint,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
-      prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.85)),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(
-          color: Colors.white.withValues(alpha: 0.75),
-          width: 1.5,
-        ),
-      ),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return TextField(
-      controller: _searchController,
-      onChanged: _filterLocations,
-      style: const TextStyle(color: Colors.white),
-      decoration: _commonDecoration(
-        hint: 'Search stations...',
-        icon: Icons.search,
-        suffixIcon: _searchController.text.isNotEmpty
-            ? GestureDetector(
-                onTap: () {
-                  _searchController.clear();
-                  _filterLocations('');
-                },
-                child: Icon(
-                  Icons.close,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label) {
-    bool isSelected = _selectedFilter == label;
+  Widget _buildStationTile(Map<String, dynamic> station, int index) {
+    final color = _statusColor(station['status']);
     return GestureDetector(
-      onTap: () => _filterByStatus(label),
+      onTap: () {
+        setState(() => _selectedStationIndex = index);
+        _flyTo(station['lat'], station['lng']);
+        _showStationSheet(station);
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.white.withOpacity(0.3),
-            width: 1.5,
-          ),
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.blue.shade900 : Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocationCard(Map<String, dynamic> location) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: _getStatusColor(location['status']).withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              _showLocationDetails(location);
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.15),
+                border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+              ),
+              child: Icon(Icons.water_drop_rounded, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _getStatusColor(
-                            location['status'],
-                          ).withOpacity(0.3),
-                        ),
-                        child: Icon(
-                          Icons.location_on,
-                          color: _getStatusColor(location['status']),
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              location['name'],
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              location['location'],
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withOpacity(0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(
-                            location['status'],
-                          ).withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _getStatusColor(location['status']),
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          location['status'],
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _getStatusColor(location['status']),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Water Quality Summary
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
+                  Text(
+                    station['name'],
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildQualityMetric(
-                          'pH',
-                          location['ph'].toString(),
-                          Icons.water_drop_outlined,
-                        ),
-                        _buildQualityMetric(
-                          'TDS',
-                          '${location['tds']} ppm',
-                          Icons.opacity_outlined,
-                        ),
-                        _buildQualityMetric(
-                          'Temp',
-                          '${location['temperature']}°C',
-                          Icons.thermostat_outlined,
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    station['area'],
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.45),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+            _buildMiniMetric('pH', station['ph'].toString()),
+            const SizedBox(width: 10),
+            _buildMiniMetric('TDS', '${station['tds']}'),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                station['status'],
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildQualityMetric(String label, String value, IconData icon) {
+  Widget _buildMiniMetric(String label, String value) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white.withOpacity(0.7), size: 20),
-        const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            color: Colors.white70,
           ),
         ),
-        const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.6)),
+          style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.35)),
         ),
       ],
     );
   }
 
-  void _showLocationDetails(Map<String, dynamic> location) {
+  void _showStationSheet(Map<String, dynamic> station) {
+    final color = _statusColor(station['status']);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      isScrollControlled: true,
+      builder: (ctx) => Container(
         decoration: BoxDecoration(
-          color: Colors.blue.shade900,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [const Color(0xFF0D1B2A), const Color(0xFF1B2838)],
+          ),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    location['name'],
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: color.withValues(alpha: 0.4),
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      _statusIcon(station['status']),
+                      color: color,
+                      size: 24,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 28,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          station['name'],
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on_outlined,
+                              size: 14,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              station['area'],
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      station['status'],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                location['location'],
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.7),
-                ),
-              ),
               const SizedBox(height: 24),
-              _buildDetailRow('pH Level', location['ph'].toString()),
-              _buildDetailRow('TDS', '${location['tds']} ppm'),
-              _buildDetailRow('Temperature', '${location['temperature']}°C'),
-              _buildDetailRow('Status', location['status']),
-              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _buildMetricCard(
+                    'pH Level',
+                    '${station['ph']}',
+                    'pH',
+                    Icons.science_outlined,
+                    color,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildMetricCard(
+                    'TDS',
+                    '${station['tds']}',
+                    'ppm',
+                    Icons.opacity_outlined,
+                    color,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildMetricCard(
+                    'EC',
+                    '${station['ec']}',
+                    'µS/cm',
+                    Icons.electric_bolt_outlined,
+                    color,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildMetricCard(
+                    'Salinity',
+                    '${station['salinity']}',
+                    'ppt',
+                    Icons.grain_outlined,
+                    color,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildMetricCard(
+                    'Temperature',
+                    '${station['temperature']}',
+                    '°C',
+                    Icons.thermostat_outlined,
+                    color,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.my_location_rounded,
+                                size: 16,
+                                color: Colors.white.withValues(alpha: 0.4),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Coordinates',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${station['lat']}, ${station['lng']}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _flyTo(station['lat'], station['lng']);
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: color.withValues(alpha: 0.2),
+                    foregroundColor: color,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: color.withValues(alpha: 0.4)),
                     ),
                   ),
-                  child: const Text(
-                    'View on Map',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.gps_fixed_rounded, size: 18, color: color),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Center on Map',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -686,28 +931,64 @@ class _GeoMapState extends State<GeoMap> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.7),
+  Widget _buildMetricCard(
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+    Color accent,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.4)),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    unit,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

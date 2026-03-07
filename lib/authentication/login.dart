@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:aquawatch/home.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/authentication/forgot_pass.dart';
 import 'package:aquawatch/services/auth_service.dart';
@@ -19,9 +20,11 @@ class _LoginPageState extends State<LoginPage>
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authorityCodeController = TextEditingController();
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
+  String _selectedUserType = 'User';
   final _authService = AuthService();
 
   @override
@@ -49,6 +52,7 @@ class _LoginPageState extends State<LoginPage>
     _animationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _authorityCodeController.dispose();
     super.dispose();
   }
 
@@ -57,6 +61,17 @@ class _LoginPageState extends State<LoginPage>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill in all fields'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedUserType == 'Authority' &&
+        _authorityCodeController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the authority verification code'),
           backgroundColor: Colors.red,
         ),
       );
@@ -77,7 +92,11 @@ class _LoginPageState extends State<LoginPage>
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -115,211 +134,232 @@ class _LoginPageState extends State<LoginPage>
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  // Back Button
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.arrow_back, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.30),
-                        width: 1.2,
-                      ),
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
-                          blurRadius: 24,
-                          offset: const Offset(0, 16),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: SlideTransition(
-                            position: _slideAnimation,
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withOpacity(0.2),
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.water_drop,
-                                    size: 50,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                const Text(
-                                  'AquaWatch',
-                                  style: TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Welcome Back',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white.withOpacity(0.8),
-                                  ),
-                                ),
-                              ],
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
                             ),
+                            child: Icon(Icons.arrow_back, color: Colors.white),
                           ),
                         ),
-                        const SizedBox(height: 60),
-                        FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: SlideTransition(
-                            position: _slideAnimation,
-                            child: Column(
-                              children: [
-                                // Email Field
-                                _buildTextField(
-                                  controller: _emailController,
-                                  label: 'Email or Phone',
-                                  icon: Icons.mail_outline,
-                                  keyboardType: TextInputType.emailAddress,
-                                ),
-                                const SizedBox(height: 20),
-                                // Password Field
-                                _buildPasswordTextField(),
-                                const SizedBox(height: 16),
-                                // Remember Me & Forgot Password
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.30),
+                            width: 1.2,
+                          ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 24,
+                              offset: const Offset(0, 16),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: SlideTransition(
+                                position: _slideAnimation,
+                                child: Column(
                                   children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(
-                                          () => _rememberMe = !_rememberMe,
-                                        );
-                                      },
-                                      child: Row(
+                                    Container(
+                                      width: 100,
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.water_drop,
+                                        size: 50,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    const Text(
+                                      'AquaWatch',
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Welcome Back',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 60),
+                            FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: SlideTransition(
+                                position: _slideAnimation,
+                                child: Column(
+                                  children: [
+                                    _buildUserTypeDropdown(),
+                                    const SizedBox(height: 20),
+                                    if (_selectedUserType == 'Authority')
+                                      Column(
                                         children: [
-                                          Checkbox(
-                                            value: _rememberMe,
-                                            onChanged: (value) {
-                                              setState(
-                                                () => _rememberMe =
-                                                    value ?? false,
-                                              );
-                                            },
-                                            fillColor:
-                                                MaterialStateProperty.all<
-                                                  Color
-                                                >(Colors.white),
-                                            checkColor: Colors.blue.shade900,
+                                          _buildTextField(
+                                            controller:
+                                                _authorityCodeController,
+                                            label:
+                                                'Authority Verification Code',
+                                            icon: Icons.verified_user_outlined,
                                           ),
-                                          const Text(
-                                            'Remember Me',
+                                          const SizedBox(height: 20),
+                                        ],
+                                      ),
+                                    _buildTextField(
+                                      controller: _emailController,
+                                      label: 'Email or Phone',
+                                      icon: Icons.mail_outline,
+                                      keyboardType: TextInputType.emailAddress,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    _buildPasswordTextField(),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(
+                                              () => _rememberMe = !_rememberMe,
+                                            );
+                                          },
+                                          child: Row(
+                                            children: [
+                                              Checkbox(
+                                                value: _rememberMe,
+                                                onChanged: (value) {
+                                                  setState(
+                                                    () => _rememberMe =
+                                                        value ?? false,
+                                                  );
+                                                },
+                                                fillColor:
+                                                    MaterialStateProperty.all<
+                                                      Color
+                                                    >(Colors.white),
+                                                checkColor:
+                                                    Colors.blue.shade900,
+                                              ),
+                                              const Text(
+                                                'Remember Me',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    const ForgotPasswordPage(),
+                                              ),
+                                            );
+                                          },
+                                          child: const Text(
+                                            'Forgot Password?',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 14,
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const ForgotPasswordPage(),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text(
-                                        'Forgot Password?',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
                                         ),
-                                      ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 32),
+                                    _buildLoginButton(),
+                                    const SizedBox(height: 24),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          'Don\'t have an account? ',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    const Register(),
+                                              ),
+                                            );
+                                          },
+                                          child: const Text(
+                                            'Sign Up',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              decoration:
+                                                  TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 32),
-                                // Login Button
-                                _buildLoginButton(),
-                                const SizedBox(height: 24),
-                                // Sign Up Link
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text(
-                                      'Don\'t have an account? ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const Register(),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text(
-                                        'Sign Up',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 40),
+                          ],
                         ),
-                        const SizedBox(height: 40),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -375,10 +415,7 @@ class _LoginPageState extends State<LoginPage>
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
-      ),
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
       decoration: _commonDecoration(hint: label, icon: icon),
     );
   }
@@ -387,10 +424,7 @@ class _LoginPageState extends State<LoginPage>
     return TextField(
       controller: _passwordController,
       obscureText: _obscurePassword,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
-      ),
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
       decoration: _commonDecoration(
         hint: 'Password',
         icon: Icons.lock_outline,
@@ -407,6 +441,45 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
+  Widget _buildUserTypeDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+      ),
+      child: DropdownButtonFormField<String>(
+        value: _selectedUserType,
+        dropdownColor: Colors.blue.shade900,
+        icon: Icon(
+          Icons.arrow_drop_down,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+        decoration: InputDecoration(
+          prefixIcon: Icon(
+            Icons.people_outline,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+        ),
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        items: const [
+          DropdownMenuItem(value: 'User', child: Text('User')),
+          DropdownMenuItem(value: 'Authority', child: Text('Authority')),
+        ],
+        onChanged: (value) {
+          if (value != null) {
+            setState(() => _selectedUserType = value);
+          }
+        },
+      ),
+    );
+  }
+
   Widget _buildLoginButton() {
     return Container(
       width: double.infinity,
@@ -416,7 +489,7 @@ class _LoginPageState extends State<LoginPage>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -453,4 +526,3 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 }
-
