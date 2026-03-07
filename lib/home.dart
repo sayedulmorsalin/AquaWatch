@@ -2,6 +2,7 @@
 import 'package:aquawatch/morsalin/data_entry.dart';
 import 'package:aquawatch/profile/profile_page.dart';
 import 'package:aquawatch/touhid-e-khuda/geo_map.dart';
+import 'package:aquawatch/services/auth_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -14,6 +15,8 @@ class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  final _authService = AuthService();
+  String _userRole = '';
 
   @override
   void initState() {
@@ -28,6 +31,16 @@ class _HomePageState extends State<HomePage>
     );
 
     _animationController.forward();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final profile = await _authService.getCurrentUserProfile();
+    if (mounted && profile != null) {
+      setState(() {
+        _userRole = (profile['role'] ?? 'User').toString();
+      });
+    }
   }
 
   @override
@@ -61,23 +74,70 @@ class _HomePageState extends State<HomePage>
                   child: Column(
                     children: [
                       const SizedBox(height: 14),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ProfilePage(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          if (_userRole.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 7,
                               ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.account_circle_outlined,
-                            color: Colors.white,
-                            size: 32,
+                              decoration: BoxDecoration(
+                                color: _userRole == 'Authority'
+                                    ? Colors.amber.withValues(alpha: 0.2)
+                                    : Colors.white.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _userRole == 'Authority'
+                                      ? Colors.amber.withValues(alpha: 0.5)
+                                      : Colors.white.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _userRole == 'Authority'
+                                        ? Icons.verified_rounded
+                                        : Icons.person_rounded,
+                                    color: _userRole == 'Authority'
+                                        ? Colors.amber
+                                        : Colors.white,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _userRole,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: _userRole == 'Authority'
+                                          ? Colors.amber
+                                          : Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            const SizedBox.shrink(),
+                          IconButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ProfilePage(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.account_circle_outlined,
+                              color: Colors.white,
+                              size: 32,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                       const SizedBox(height: 10),
                       FadeTransition(
@@ -90,7 +150,10 @@ class _HomePageState extends State<HomePage>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: Colors.white.withValues(alpha: 0.2),
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
                               child: const Icon(
                                 Icons.water_drop,
@@ -175,7 +238,10 @@ class _HomePageState extends State<HomePage>
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
       child: Material(
         color: Colors.transparent,

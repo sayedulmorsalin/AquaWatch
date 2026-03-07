@@ -2,11 +2,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
-  AuthService({
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -29,6 +27,7 @@ class AuthService {
     required String address,
     required String email,
     required String password,
+    required String userRole,
   }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
@@ -43,6 +42,7 @@ class AuthService {
         'phone': phone.trim(),
         'address': address.trim(),
         'email': email.trim(),
+        'role': userRole,
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
