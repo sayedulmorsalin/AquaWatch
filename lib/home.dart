@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:aquawatch/authentication/login.dart';
-import 'package:aquawatch/authentication/register.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/morsalin/data_entry.dart';
+import 'package:aquawatch/profile/profile_page.dart';
 import 'package:aquawatch/touhid-e-khuda/geo_map.dart';
 
 class HomePage extends StatefulWidget {
@@ -53,119 +52,111 @@ class _HomePageState extends State<HomePage>
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  const SizedBox(height: 40),
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.2),
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: const Icon(
-                            Icons.water_drop,
-                            size: 50,
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ProfilePage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.account_circle_outlined,
                             color: Colors.white,
+                            size: 32,
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'AquaWatch',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                      ),
+                      const SizedBox(height: 10),
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.2),
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(
+                                Icons.water_drop,
+                                size: 50,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
+                              'AquaWatch',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Water Quality Monitoring',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Water Quality Monitoring',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
+                      ),
+                      const SizedBox(height: 60),
+                      FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Column(
+                          children: [
+                            _buildNavigationCard(
+                              title: 'Data Entry',
+                              description: 'Enter water quality measurements',
+                              icon: Icons.edit_document,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const DataEntry(),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildNavigationCard(
+                              title: 'Water Map',
+                              description: 'View monitoring stations on map',
+                              icon: Icons.map,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const GeoMap(),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 40),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 60),
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        // Login Page Navigation
-                        _buildNavigationCard(
-                          title: 'Login',
-                          description: 'User authentication page',
-                          icon: Icons.login,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LoginPage(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        // Register Page Navigation
-                        _buildNavigationCard(
-                          title: 'Register',
-                          description: 'Create new account',
-                          icon: Icons.app_registration,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const Register(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        // Data Entry Page Navigation
-                        _buildNavigationCard(
-                          title: 'Data Entry',
-                          description: 'Enter water quality measurements',
-                          icon: Icons.edit_document,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DataEntry(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        // Geo Map Page Navigation
-                        _buildNavigationCard(
-                          title: 'Water Map',
-                          description: 'View monitoring stations on map',
-                          icon: Icons.map,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const GeoMap(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 40),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -182,9 +173,9 @@ class _HomePageState extends State<HomePage>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Material(
         color: Colors.transparent,
@@ -199,7 +190,7 @@ class _HomePageState extends State<HomePage>
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, size: 32, color: Colors.white),
@@ -222,7 +213,7 @@ class _HomePageState extends State<HomePage>
                         description,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -230,7 +221,7 @@ class _HomePageState extends State<HomePage>
                 ),
                 Icon(
                   Icons.arrow_forward_ios,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha: 0.6),
                   size: 20,
                 ),
               ],

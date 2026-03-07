@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
@@ -10,6 +10,8 @@ class AuthService {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+
+  User? get currentUser => _auth.currentUser;
 
   Future<UserCredential> signIn({
     required String email,
@@ -50,6 +52,23 @@ class AuthService {
 
   Future<void> sendPasswordResetEmail({required String email}) {
     return _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+    final user = currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    final doc = await _firestore.collection('users').doc(user.uid).get();
+    final data = doc.data() ?? <String, dynamic>{};
+    data['email'] = data['email'] ?? user.email ?? '';
+    data['name'] = data['name'] ?? user.displayName ?? '';
+    return data;
+  }
+
+  Future<void> signOut() {
+    return _auth.signOut();
   }
 
   String readableAuthError(FirebaseAuthException e) {

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'data_analysis_report.dart';
 
 class DataEntry extends StatefulWidget {
   const DataEntry({super.key});
@@ -51,7 +52,7 @@ class _DataEntryState extends State<DataEntry>
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_phController.text.isEmpty ||
         _tdsController.text.isEmpty ||
         _ecController.text.isEmpty ||
@@ -66,23 +67,48 @@ class _DataEntryState extends State<DataEntry>
       return;
     }
 
-    setState(() => _isLoading = true);
+    final ph = double.tryParse(_phController.text);
+    final tds = double.tryParse(_tdsController.text);
+    final ec = double.tryParse(_ecController.text);
+    final salinity = double.tryParse(_salinityController.text);
+    final temperature = double.tryParse(_temperatureController.text);
 
-    Future.delayed(const Duration(seconds: 2), () {
-      setState(() => _isLoading = false);
+    if (ph == null ||
+        tds == null ||
+        ec == null ||
+        salinity == null ||
+        temperature == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Data submitted successfully!'),
-          backgroundColor: Colors.green,
+          content: Text('Please enter valid numeric values'),
+          backgroundColor: Colors.red,
         ),
       );
-      // Clear fields after submission
-      _phController.clear();
-      _tdsController.clear();
-      _ecController.clear();
-      _salinityController.clear();
-      _temperatureController.clear();
-    });
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DataAnalysisReport(
+          data: WaterQualityData(
+            ph: ph,
+            tds: tds,
+            ec: ec,
+            salinity: salinity,
+            temperature: temperature,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -106,7 +132,6 @@ class _DataEntryState extends State<DataEntry>
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Column(
                 children: [
-                  // Back Button
                   Align(
                     alignment: Alignment.topLeft,
                     child: GestureDetector(
@@ -114,7 +139,7 @@ class _DataEntryState extends State<DataEntry>
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(Icons.arrow_back, color: Colors.white),
@@ -152,7 +177,7 @@ class _DataEntryState extends State<DataEntry>
                                   height: 90,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     border: Border.all(
                                       color: Colors.white,
                                       width: 2,
@@ -178,7 +203,7 @@ class _DataEntryState extends State<DataEntry>
                                   'Enter Device Readings',
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -187,7 +212,7 @@ class _DataEntryState extends State<DataEntry>
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -201,7 +226,6 @@ class _DataEntryState extends State<DataEntry>
                             position: _slideAnimation,
                             child: Column(
                               children: [
-                                // pH Field
                                 _buildDataField(
                                   controller: _phController,
                                   label: 'pH Level',
@@ -210,7 +234,6 @@ class _DataEntryState extends State<DataEntry>
                                   hint: '6.5 - 8.5',
                                 ),
                                 const SizedBox(height: 16),
-                                // TDS Field
                                 _buildDataField(
                                   controller: _tdsController,
                                   label: 'TDS (Total Dissolved Solids)',
@@ -219,7 +242,6 @@ class _DataEntryState extends State<DataEntry>
                                   hint: '0 - 2000',
                                 ),
                                 const SizedBox(height: 16),
-                                // EC Field
                                 _buildDataField(
                                   controller: _ecController,
                                   label: 'Electrical Conductivity (EC)',
@@ -228,7 +250,6 @@ class _DataEntryState extends State<DataEntry>
                                   hint: '0 - 2000',
                                 ),
                                 const SizedBox(height: 16),
-                                // Salinity Field
                                 _buildDataField(
                                   controller: _salinityController,
                                   label: 'Salinity',
@@ -237,7 +258,6 @@ class _DataEntryState extends State<DataEntry>
                                   hint: '0 - 50',
                                 ),
                                 const SizedBox(height: 16),
-                                // Temperature Field
                                 _buildDataField(
                                   controller: _temperatureController,
                                   label: 'Temperature',
@@ -246,7 +266,6 @@ class _DataEntryState extends State<DataEntry>
                                   hint: '0 - 50',
                                 ),
                                 const SizedBox(height: 32),
-                                // Submit Button
                                 _buildSubmitButton(),
                                 const SizedBox(height: 30),
                               ],
@@ -354,7 +373,7 @@ class _DataEntryState extends State<DataEntry>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
