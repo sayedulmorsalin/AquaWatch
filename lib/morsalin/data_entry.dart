@@ -1,4 +1,6 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'data_analysis_report.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,6 +27,14 @@ class _DataEntryState extends State<DataEntry>
   final _salinityController = TextEditingController();
   final _temperatureController = TextEditingController();
   bool _isLoading = false;
+
+  final List<XFile> _phImages = [];
+  final List<XFile> _tdsImages = [];
+  final List<XFile> _ecImages = [];
+  final List<XFile> _salinityImages = [];
+  final List<XFile> _temperatureImages = [];
+
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -57,6 +67,15 @@ class _DataEntryState extends State<DataEntry>
     super.dispose();
   }
 
+  Future<void> _pickImages(List<XFile> images) async {
+    final pickedFiles = await _picker.pickMultiImage();
+    if (pickedFiles != null) {
+      images.addAll(pickedFiles);
+      if (images.length > 4) {
+        images.removeRange(4, images.length);
+      }
+      setState(() {});
+    }
   Future<Position> _getUserLocation() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -150,6 +169,20 @@ class _DataEntryState extends State<DataEntry>
       return;
     }
 
+    if (_phImages.length != 4 ||
+        _tdsImages.length != 4 ||
+        _ecImages.length != 4 ||
+        _salinityImages.length != 4 ||
+        _temperatureImages.length != 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide exactly 4 images for each field'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final ph = double.tryParse(_phController.text);
     final tds = double.tryParse(_tdsController.text);
     final ec = double.tryParse(_ecController.text);
@@ -233,6 +266,22 @@ class _DataEntryState extends State<DataEntry>
       if (!mounted) return;
 
       // Show success message with location status
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DataAnalysisReport(
+          data: WaterQualityData(
+            ph: ph,
+            tds: tds,
+            ec: ec,
+            salinity: salinity,
+            temperature: temperature,
+            phImages: _phImages,
+            tdsImages: _tdsImages,
+            ecImages: _ecImages,
+            salinityImages: _salinityImages,
+            temperatureImages: _temperatureImages,
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -394,6 +443,7 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.science_outlined,
                                   unit: 'pH',
                                   hint: '6.5 - 8.5',
+                                  images: _phImages,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildDataField(
@@ -402,6 +452,7 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.opacity_outlined,
                                   unit: 'ppm',
                                   hint: '0 - 2000',
+                                  images: _tdsImages,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildDataField(
@@ -410,6 +461,7 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.electric_bolt_outlined,
                                   unit: 'µS/cm',
                                   hint: '0 - 2000',
+                                  images: _ecImages,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildDataField(
@@ -418,6 +470,7 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.grain_outlined,
                                   unit: 'ppt',
                                   hint: '0 - 50',
+                                  images: _salinityImages,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildDataField(
@@ -426,6 +479,7 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.thermostat_outlined,
                                   unit: '°C',
                                   hint: '0 - 50',
+                                  images: _temperatureImages,
                                 ),
                                 const SizedBox(height: 32),
                                 _buildSubmitButton(),
@@ -496,6 +550,7 @@ class _DataEntryState extends State<DataEntry>
     required IconData icon,
     required String unit,
     required String hint,
+    required List<XFile> images,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,6 +577,44 @@ class _DataEntryState extends State<DataEntry>
             suffixText: unit,
           ),
         ),
+        const SizedBox(height: 8),
+        Text(
+          'Images: ${images.length}/4',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: () => _pickImages(images),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Pick Images'),
+        ),
+        if (images.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 60,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Image.file(
+                    File(images[index].path),
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ],
     );
   }
