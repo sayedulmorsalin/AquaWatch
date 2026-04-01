@@ -64,8 +64,9 @@ class _DataEntryState extends State<DataEntry>
     // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      await Geolocator.openLocationSettings();
       throw Exception(
-        'Location services are disabled. Please enable location services in your settings.',
+        'Location services are disabled. Please enable location services in your device settings.',
       );
     }
 
@@ -74,24 +75,27 @@ class _DataEntryState extends State<DataEntry>
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         throw Exception(
-          'Location permissions are denied. Grant permission to continue.',
+          'Location permission denied. Please grant location permission to save water quality readings with location data.',
         );
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
+      await Geolocator.openAppSettings();
       throw Exception(
-        'Location permissions are permanently denied. Please enable them in app settings.',
+        'Location permission permanently denied. Opening app settings. Please enable location permission for this app.',
       );
     }
 
     try {
       return await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 10),
+        timeLimit: const Duration(seconds: 15),
       );
     } catch (e) {
-      throw Exception('Failed to get location: ${e.toString()}');
+      throw Exception(
+        'Failed to get location: $e. Make sure location services are enabled.',
+      );
     }
   }
 
@@ -172,24 +176,45 @@ class _DataEntryState extends State<DataEntry>
       // Get user location
       double latitude = 0.0;
       double longitude = 0.0;
+      bool locationSaved = false;
 
       try {
         final position = await _getUserLocation();
         latitude = position.latitude;
         longitude = position.longitude;
+        locationSaved = true;
       } catch (locError) {
-        if (!mounted) return;
+        if (!mounted) {
+          setState(() => _isLoading = false);
+          return;
+        }
 
-        // Show warning but allow user to continue without location
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        // Show dialog asking user if they want to continue without location
+        final shouldContinue = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Location Not Available'),
             content: Text(
-              'Location error: ${locError.toString()}. Data will be saved without location.',
+              'Error: ${locError.toString()}\n\nDo you want to save the data without location information?',
             ),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Retry'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Continue Without Location'),
+              ),
+            ],
           ),
         );
+
+        if (shouldContinue == false || shouldContinue == null) {
+          setState(() => _isLoading = false);
+          return;
+        }
       }
 
       // Save to Firestore
@@ -207,10 +232,14 @@ class _DataEntryState extends State<DataEntry>
 
       if (!mounted) return;
 
-      // Show success message
+      // Show success message with location status
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data saved successfully!'),
+        SnackBar(
+          content: Text(
+            locationSaved
+                ? 'Data saved successfully with location!'
+                : 'Data saved successfully (no location captured).',
+          ),
           backgroundColor: Colors.green,
         ),
       );
