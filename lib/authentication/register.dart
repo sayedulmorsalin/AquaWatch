@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
 import 'package:aquawatch/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -513,6 +513,4 @@ class _RegisterState extends State<Register>
       ),
     );
   }
-
-  //chcek git
 }

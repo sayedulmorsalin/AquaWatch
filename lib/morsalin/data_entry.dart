@@ -2,6 +2,9 @@
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'data_analysis_report.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 
 class DataEntry extends StatefulWidget {
   const DataEntry({super.key});
@@ -15,6 +18,8 @@ class _DataEntryState extends State<DataEntry>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final _phController = TextEditingController();
   final _tdsController = TextEditingController();
@@ -71,6 +76,78 @@ class _DataEntryState extends State<DataEntry>
       }
       setState(() {});
     }
+  Future<Position> _getUserLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // Check if location services are enabled
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception(
+        'Location services are disabled. Please enable location services in your settings.',
+      );
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw Exception(
+          'Location permissions are denied. Grant permission to continue.',
+        );
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception(
+        'Location permissions are permanently denied. Please enable them in app settings.',
+      );
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+        timeLimit: const Duration(seconds: 10),
+      );
+    } catch (e) {
+      throw Exception('Failed to get location: ${e.toString()}');
+    }
+  }
+
+  Future<void> _saveReadingToFirestore({
+    required double ph,
+    required double tds,
+    required double ec,
+    required double salinity,
+    required double temperature,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'Please sign in before submitting data.',
+      );
+    }
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('water_quality_readings')
+        .add({
+          'ph': ph,
+          'tds': tds,
+          'ec': ec,
+          'salinity': salinity,
+          'temperature': temperature,
+          'latitude': latitude,
+          'longitude': longitude,
+          'userId': user.uid,
+          'userEmail': user.email,
+          'userName': user.displayName,
+          'submittedAt': FieldValue.serverTimestamp(),
+        });
   }
 
   Future<void> _handleSubmit() async {
@@ -124,11 +201,44 @@ class _DataEntryState extends State<DataEntry>
 
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      // Get user location
+      double latitude = 0.0;
+      double longitude = 0.0;
 
-    setState(() => _isLoading = false);
+      try {
+        final position = await _getUserLocation();
+        latitude = position.latitude;
+        longitude = position.longitude;
+      } catch (locError) {
+        if (!mounted) return;
 
-    if (!mounted) return;
+        // Show warning but allow user to continue without location
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Location error: ${locError.toString()}. Data will be saved without location.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Save to Firestore
+      await _saveReadingToFirestore(
+        ph: ph,
+        tds: tds,
+        ec: ec,
+        salinity: salinity,
+        temperature: temperature,
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
 
     Navigator.push(
       context,
@@ -145,10 +255,41 @@ class _DataEntryState extends State<DataEntry>
             ecImages: _ecImages,
             salinityImages: _salinityImages,
             temperatureImages: _temperatureImages,
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data saved successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Navigate to analysis report
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DataAnalysisReport(
+            data: WaterQualityData(
+              ph: ph,
+              tds: tds,
+              ec: ec,
+              salinity: salinity,
+              temperature: temperature,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving data: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
