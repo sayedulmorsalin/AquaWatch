@@ -1,5 +1,6 @@
 ﻿import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class WaterQualityData {
   final double ph;
@@ -7,6 +8,11 @@ class WaterQualityData {
   final double ec;
   final double salinity;
   final double temperature;
+  final List<XFile> phImages;
+  final List<XFile> tdsImages;
+  final List<XFile> ecImages;
+  final List<XFile> salinityImages;
+  final List<XFile> temperatureImages;
 
   const WaterQualityData({
     required this.ph,
@@ -14,6 +20,11 @@ class WaterQualityData {
     required this.ec,
     required this.salinity,
     required this.temperature,
+    required this.phImages,
+    required this.tdsImages,
+    required this.ecImages,
+    required this.salinityImages,
+    required this.temperatureImages,
   });
 }
 
@@ -597,7 +608,10 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.04)],
+                colors: [
+                  color.withValues(alpha: 0.12),
+                  color.withValues(alpha: 0.04),
+                ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: color.withValues(alpha: 0.25)),
