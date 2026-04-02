@@ -1,10 +1,12 @@
-﻿import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'data_analysis_report.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'data_analysis_report.dart';
 
 class DataEntry extends StatefulWidget {
   const DataEntry({super.key});
@@ -18,15 +20,16 @@ class _DataEntryState extends State<DataEntry>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ImagePicker _picker = ImagePicker();
 
   final _phController = TextEditingController();
   final _tdsController = TextEditingController();
   final _ecController = TextEditingController();
   final _salinityController = TextEditingController();
   final _temperatureController = TextEditingController();
-  bool _isLoading = false;
 
   final List<XFile> _phImages = [];
   final List<XFile> _tdsImages = [];
@@ -34,11 +37,12 @@ class _DataEntryState extends State<DataEntry>
   final List<XFile> _salinityImages = [];
   final List<XFile> _temperatureImages = [];
 
-  final ImagePicker _picker = ImagePicker();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
@@ -69,53 +73,40 @@ class _DataEntryState extends State<DataEntry>
 
   Future<void> _pickImages(List<XFile> images) async {
     final pickedFiles = await _picker.pickMultiImage();
-    if (pickedFiles != null) {
-      images.addAll(pickedFiles);
-      if (images.length > 4) {
-        images.removeRange(4, images.length);
-      }
-      setState(() {});
+    if (pickedFiles.isEmpty) return;
+
+    images.addAll(pickedFiles);
+    if (images.length > 4) {
+      images.removeRange(4, images.length);
     }
+
+    setState(() {});
+  }
+
   Future<Position> _getUserLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // Check if location services are enabled
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-      throw Exception(
-        'Location services are disabled. Please enable location services in your device settings.',
-      );
+      throw Exception('Location services are disabled. Please enable them.');
     }
 
-    permission = await Geolocator.checkPermission();
+    var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception(
-          'Location permission denied. Please grant location permission to save water quality readings with location data.',
-        );
+        throw Exception('Location permission denied.');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      await Geolocator.openAppSettings();
       throw Exception(
-        'Location permission permanently denied. Opening app settings. Please enable location permission for this app.',
+        'Location permission is permanently denied. Enable it in app settings.',
       );
     }
 
-    try {
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15),
-      );
-    } catch (e) {
-      throw Exception(
-        'Failed to get location: $e. Make sure location services are enabled.',
-      );
-    }
+    return Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.best,
+      timeLimit: const Duration(seconds: 15),
+    );
   }
 
   Future<void> _saveReadingToFirestore({
@@ -150,6 +141,13 @@ class _DataEntryState extends State<DataEntry>
           'userId': user.uid,
           'userEmail': user.email,
           'userName': user.displayName,
+          'phImagePaths': _phImages.map((e) => e.path).toList(),
+          'tdsImagePaths': _tdsImages.map((e) => e.path).toList(),
+          'ecImagePaths': _ecImages.map((e) => e.path).toList(),
+          'salinityImagePaths': _salinityImages.map((e) => e.path).toList(),
+          'temperatureImagePaths': _temperatureImages
+              .map((e) => e.path)
+              .toList(),
           'submittedAt': FieldValue.serverTimestamp(),
         });
   }
@@ -206,51 +204,45 @@ class _DataEntryState extends State<DataEntry>
     setState(() => _isLoading = true);
 
     try {
-      // Get user location
-      double latitude = 0.0;
-      double longitude = 0.0;
-      bool locationSaved = false;
+      var latitude = 0.0;
+      var longitude = 0.0;
+      var locationSaved = false;
 
       try {
         final position = await _getUserLocation();
         latitude = position.latitude;
         longitude = position.longitude;
         locationSaved = true;
-      } catch (locError) {
-        if (!mounted) {
-          setState(() => _isLoading = false);
-          return;
-        }
-
-        // Show dialog asking user if they want to continue without location
+      } catch (_) {
+        if (!mounted) return;
         final shouldContinue = await showDialog<bool>(
           context: context,
-          barrierDismissible: false,
-          builder: (BuildContext context) => AlertDialog(
-            title: const Text('Location Not Available'),
-            content: Text(
-              'Error: ${locError.toString()}\n\nDo you want to save the data without location information?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Retry'),
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Location unavailable'),
+              content: const Text(
+                'Could not get location. Save data without location?',
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Continue Without Location'),
-              ),
-            ],
-          ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            );
+          },
         );
 
-        if (shouldContinue == false || shouldContinue == null) {
+        if (shouldContinue != true) {
           setState(() => _isLoading = false);
           return;
         }
       }
 
-      // Save to Firestore
       await _saveReadingToFirestore(
         ph: ph,
         tds: tds,
@@ -261,39 +253,19 @@ class _DataEntryState extends State<DataEntry>
         longitude: longitude,
       );
 
-      setState(() => _isLoading = false);
-
       if (!mounted) return;
 
-      // Show success message with location status
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DataAnalysisReport(
-          data: WaterQualityData(
-            ph: ph,
-            tds: tds,
-            ec: ec,
-            salinity: salinity,
-            temperature: temperature,
-            phImages: _phImages,
-            tdsImages: _tdsImages,
-            ecImages: _ecImages,
-            salinityImages: _salinityImages,
-            temperatureImages: _temperatureImages,
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             locationSaved
-                ? 'Data saved successfully with location!'
-                : 'Data saved successfully (no location captured).',
+                ? 'Data saved with location.'
+                : 'Data saved without location.',
           ),
           backgroundColor: Colors.green,
         ),
       );
 
-      // Navigate to analysis report
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -304,21 +276,27 @@ class _DataEntryState extends State<DataEntry>
               ec: ec,
               salinity: salinity,
               temperature: temperature,
+              phImages: _phImages,
+              tdsImages: _tdsImages,
+              ecImages: _ecImages,
+              salinityImages: _salinityImages,
+              temperatureImages: _temperatureImages,
             ),
           ),
         ),
       );
     } catch (e) {
-      setState(() => _isLoading = false);
-
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error saving data: ${e.toString()}'),
+          content: Text('Error saving data: $e'),
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -353,7 +331,10 @@ class _DataEntryState extends State<DataEntry>
                           color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(Icons.arrow_back, color: Colors.white),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -459,7 +440,7 @@ class _DataEntryState extends State<DataEntry>
                                   controller: _ecController,
                                   label: 'Electrical Conductivity (EC)',
                                   icon: Icons.electric_bolt_outlined,
-                                  unit: 'µS/cm',
+                                  unit: 'uS/cm',
                                   hint: '0 - 2000',
                                   images: _ecImages,
                                 ),
@@ -477,7 +458,7 @@ class _DataEntryState extends State<DataEntry>
                                   controller: _temperatureController,
                                   label: 'Temperature',
                                   icon: Icons.thermostat_outlined,
-                                  unit: '°C',
+                                  unit: 'C',
                                   hint: '0 - 50',
                                   images: _temperatureImages,
                                 ),
@@ -566,7 +547,7 @@ class _DataEntryState extends State<DataEntry>
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w500,
