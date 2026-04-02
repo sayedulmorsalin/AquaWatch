@@ -21,13 +21,15 @@ class ReadingVerificationService {
 
       for (final doc in rootDocs) {
         if (doc.data()['verificationStatus']?.toString() == 'pending') {
-          merged[doc.reference.path] = doc;
+          // Root collection document is the canonical pending record.
+          merged[doc.id] = doc;
         }
       }
 
       for (final doc in nestedDocs) {
         if (doc.data()['verificationStatus']?.toString() == 'pending') {
-          merged[doc.reference.path] = doc;
+          // Keep nested record only when no root record exists for the same id.
+          merged.putIfAbsent(doc.id, () => doc);
         }
       }
 

@@ -586,7 +586,15 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                         icon: const Icon(
                                           Icons.visibility_outlined,
                                         ),
-                                        label: const Text('Details'),
+                                        label: const Text(
+                                          'Details',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor: Colors.white,
                                           side: BorderSide(
@@ -606,7 +614,15 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                         icon: const Icon(
                                           Icons.check_circle_outline_rounded,
                                         ),
-                                        label: const Text('Approve'),
+                                        label: const Text(
+                                          'Approve',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor:
                                               Colors.green.shade600,
@@ -621,7 +637,15 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                           await _rejectReading(doc.reference);
                                         },
                                         icon: const Icon(Icons.close_rounded),
-                                        label: const Text('Reject'),
+                                        label: const Text(
+                                          'Reject',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.red.shade600,
                                           foregroundColor: Colors.white,
