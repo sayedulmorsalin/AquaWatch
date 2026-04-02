@@ -64,11 +64,16 @@ class ReadingVerificationService {
   Future<void> approveReading({
     required DocumentReference<Map<String, dynamic>> reference,
     required String verifiedBy,
+    String? verifierUid,
+    String? verifierName,
+    String? verifierEmail,
   }) {
-    return _updateVerificationState(
+    return _moveToVerifiedAndDeletePending(
       reference: reference,
       verifiedBy: verifiedBy,
-      status: 'approved',
+      verifierUid: verifierUid,
+      verifierName: verifierName,
+      verifierEmail: verifierEmail,
     );
   }
 
@@ -77,35 +82,43 @@ class ReadingVerificationService {
     required String verifiedBy,
     String? reason,
   }) {
-    return _updateVerificationState(
-      reference: reference,
-      verifiedBy: verifiedBy,
-      status: 'rejected',
-      note: reason,
-    );
+    return _deletePendingReading(reference: reference);
   }
 
-  Future<void> _updateVerificationState({
+  Future<void> _moveToVerifiedAndDeletePending({
     required DocumentReference<Map<String, dynamic>> reference,
     required String verifiedBy,
-    required String status,
-    String? note,
+    String? verifierUid,
+    String? verifierName,
+    String? verifierEmail,
   }) async {
     final snapshot = await reference.get();
     final data = snapshot.data() ?? <String, dynamic>{};
     final userId = data['userId']?.toString();
 
-    final updates = <String, dynamic>{
-      'verificationStatus': status,
+    final verifiedPayload = <String, dynamic>{
+      ...data,
+      'verificationStatus': 'approved',
       'verifiedBy': verifiedBy,
+      'verifiedByUid': verifierUid,
+      'verifiedByName': verifierName,
+      'verifiedByEmail': verifierEmail,
       'verifiedAt': FieldValue.serverTimestamp(),
+      'approvedAt': FieldValue.serverTimestamp(),
     };
-    if (note != null && note.isNotEmpty) {
-      updates['verificationNote'] = note;
-    }
+
+    final verifiedRef = _firestore
+        .collection('verified_water_quality_readings')
+        .doc(reference.id);
 
     final batch = _firestore.batch();
-    batch.update(reference, updates);
+    batch.set(verifiedRef, verifiedPayload);
+
+    final refsToDelete = <String, DocumentReference<Map<String, dynamic>>>{
+      reference.path: reference,
+      _firestore.collection('water_quality_readings').doc(reference.id).path:
+          _firestore.collection('water_quality_readings').doc(reference.id),
+    };
 
     if (userId != null && userId.isNotEmpty) {
       final userRef = _firestore
@@ -113,7 +126,41 @@ class ReadingVerificationService {
           .doc(userId)
           .collection('water_quality_readings')
           .doc(reference.id);
-      batch.update(userRef, updates);
+      refsToDelete[userRef.path] = userRef;
+    }
+
+    for (final ref in refsToDelete.values) {
+      batch.delete(ref);
+    }
+
+    await batch.commit();
+  }
+
+  Future<void> _deletePendingReading({
+    required DocumentReference<Map<String, dynamic>> reference,
+  }) async {
+    final snapshot = await reference.get();
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final userId = data['userId']?.toString();
+
+    final refsToDelete = <String, DocumentReference<Map<String, dynamic>>>{
+      reference.path: reference,
+      _firestore.collection('water_quality_readings').doc(reference.id).path:
+          _firestore.collection('water_quality_readings').doc(reference.id),
+    };
+
+    if (userId != null && userId.isNotEmpty) {
+      final userRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('water_quality_readings')
+          .doc(reference.id);
+      refsToDelete[userRef.path] = userRef;
+    }
+
+    final batch = _firestore.batch();
+    for (final ref in refsToDelete.values) {
+      batch.delete(ref);
     }
 
     await batch.commit();

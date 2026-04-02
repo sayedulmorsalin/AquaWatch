@@ -69,10 +69,18 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
     final user = _authService.currentUser;
     if (user == null) return;
 
+    final profile = await _authService.getCurrentUserProfile();
+    final verifierName = (profile?['name'] ?? user.displayName ?? 'Authority')
+        .toString();
+    final verifierEmail = (profile?['email'] ?? user.email ?? '').toString();
+
     try {
       await _verificationService.approveReading(
         reference: ref,
-        verifiedBy: user.email ?? user.uid,
+        verifiedBy: verifierEmail.isNotEmpty ? verifierEmail : user.uid,
+        verifierUid: user.uid,
+        verifierName: verifierName,
+        verifierEmail: verifierEmail,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

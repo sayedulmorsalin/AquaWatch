@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 
 class WaterReadingService {
@@ -12,39 +13,85 @@ class WaterReadingService {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
+  Future<File> _prepareCompressedImage(File sourceFile) async {
+    try {
+      final length = await sourceFile.length();
+      if (length <= 250 * 1024) {
+        return sourceFile;
+      }
+
+      final extension = sourceFile.path.toLowerCase().endsWith('.png')
+          ? '.png'
+          : '.jpg';
+      final targetPath = sourceFile.path.replaceFirst(
+        RegExp(r'(\.[^.]+)?$'),
+        '_compressed$extension',
+      );
+
+      final compressed = await FlutterImageCompress.compressAndGetFile(
+        sourceFile.absolute.path,
+        targetPath,
+        quality: 50,
+        minWidth: 1280,
+        minHeight: 1280,
+        keepExif: false,
+        format: extension == '.png' ? CompressFormat.png : CompressFormat.jpeg,
+      );
+
+      if (compressed == null) {
+        return sourceFile;
+      }
+
+      return File(compressed.path);
+    } on UnimplementedError {
+      // Some platform/plugin builds don't implement compression.
+      return sourceFile;
+    } catch (_) {
+      return sourceFile;
+    }
+  }
+
   Future<String> _uploadToFreeImageHost(String imagePath) async {
-    final file = File(imagePath);
-    if (!await file.exists()) {
+    final originalFile = File(imagePath);
+    if (!await originalFile.exists()) {
       throw Exception('Image file not found: $imagePath');
     }
 
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('https://catbox.moe/user/api.php'),
-    );
+    final uploadFile = await _prepareCompressedImage(originalFile);
 
-    request.fields['reqtype'] = 'fileupload';
-    request.headers['User-Agent'] = 'AquaWatch/1.0';
-
-    request.files.add(
-      await http.MultipartFile.fromPath('fileToUpload', imagePath),
-    );
-
-    final response = await request.send();
-    final responseBody = await response.stream.bytesToString();
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Catbox upload failed (${response.statusCode}): ${responseBody.trim()}',
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://catbox.moe/user/api.php'),
       );
-    }
 
-    final url = responseBody.trim();
-    if (url.isEmpty) {
-      throw Exception('Catbox returned an empty URL.');
-    }
+      request.fields['reqtype'] = 'fileupload';
+      request.headers['User-Agent'] = 'AquaWatch/1.0';
 
-    return url;
+      request.files.add(
+        await http.MultipartFile.fromPath('fileToUpload', uploadFile.path),
+      );
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Catbox upload failed (${response.statusCode}): ${responseBody.trim()}',
+        );
+      }
+
+      final url = responseBody.trim();
+      if (url.isEmpty) {
+        throw Exception('Catbox returned an empty URL.');
+      }
+
+      return url;
+    } finally {
+      if (uploadFile.path != originalFile.path && await uploadFile.exists()) {
+        await uploadFile.delete();
+      }
+    }
   }
 
   Future<void> saveReading({
