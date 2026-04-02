@@ -1,6 +1,9 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GeoMap extends StatefulWidget {
   const GeoMap({super.key});
@@ -18,65 +21,25 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
   String _selectedFilter = 'All';
   bool _panelExpanded = false;
   int? _selectedStationIndex;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _verifiedReadingsSub;
 
-  final List<Map<String, dynamic>> _waterStations = [
-    {
-      'name': 'River Station A',
-      'area': 'Downtown Area',
-      'ph': 7.2,
-      'tds': 450,
-      'ec': 720,
-      'salinity': 0.4,
-      'temperature': 22,
-      'status': 'Good',
-      'lat': 23.8103,
-      'lng': 90.2566,
-    },
-    {
-      'name': 'Lake Station B',
-      'area': 'North Region',
-      'ph': 6.8,
-      'tds': 320,
-      'ec': 510,
-      'salinity': 0.3,
-      'temperature': 24,
-      'status': 'Excellent',
-      'lat': 23.8500,
-      'lng': 90.3000,
-    },
-    {
-      'name': 'Pond Station C',
-      'area': 'South Region',
-      'ph': 7.5,
-      'tds': 680,
-      'ec': 1100,
-      'salinity': 1.8,
-      'temperature': 26,
-      'status': 'Fair',
-      'lat': 23.7500,
-      'lng': 90.4000,
-    },
-    {
-      'name': 'Canal Station D',
-      'area': 'East Region',
-      'ph': 6.5,
-      'tds': 280,
-      'ec': 440,
-      'salinity': 0.2,
-      'temperature': 21,
-      'status': 'Excellent',
-      'lat': 23.8200,
-      'lng': 90.5000,
-    },
-  ];
+  final List<Map<String, dynamic>> _waterStations = [];
 
   late List<Map<String, dynamic>> _filtered;
 
   @override
   void initState() {
     super.initState();
-    _filtered = List.of(_waterStations);
+    _filtered = [];
     _mapController = MapController();
+    _verifiedReadingsSub = FirebaseFirestore.instance
+        .collection('verified_water_quality_readings')
+        .orderBy('approvedAt', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+          if (!mounted) return;
+          _syncVerifiedReadings(snapshot.docs);
+        });
 
     _panelController = AnimationController(
       duration: const Duration(milliseconds: 400),
@@ -90,6 +53,7 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _verifiedReadingsSub?.cancel();
     _panelController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -110,6 +74,45 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     });
   }
 
+  void _syncVerifiedReadings(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    _waterStations
+      ..clear()
+      ..addAll(
+        docs
+            .map((doc) {
+              final data = doc.data();
+              final lat = (data['latitude'] as num?)?.toDouble();
+              final lng = (data['longitude'] as num?)?.toDouble();
+              if (lat == null || lng == null) {
+                return <String, dynamic>{};
+              }
+
+              final status = (data['overallQuality'] ?? 'Unknown').toString();
+              final userName = (data['userName'] ?? 'Submitted Reading')
+                  .toString();
+              final submittedBy = (data['userEmail'] ?? 'Unknown').toString();
+
+              return {
+                'name': userName,
+                'area': submittedBy,
+                'ph': (data['ph'] as num?)?.toDouble() ?? 0.0,
+                'tds': (data['tds'] as num?)?.toDouble() ?? 0.0,
+                'ec': (data['ec'] as num?)?.toDouble() ?? 0.0,
+                'salinity': (data['salinity'] as num?)?.toDouble() ?? 0.0,
+                'temperature': (data['temperature'] as num?)?.toDouble() ?? 0.0,
+                'status': status,
+                'lat': lat,
+                'lng': lng,
+              };
+            })
+            .where((item) => item.isNotEmpty),
+      );
+
+    _applyFilters();
+  }
+
   void _selectFilter(String status) {
     _selectedFilter = status;
     _applyFilters();
@@ -124,6 +127,8 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
       case 'Fair':
         return const Color(0xFFFFA726);
       case 'Poor':
+      case 'Unsafe':
+      case 'Dangerous':
         return const Color(0xFFFF5252);
       default:
         return Colors.grey;
@@ -139,6 +144,8 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
       case 'Fair':
         return Icons.info_rounded;
       case 'Poor':
+      case 'Unsafe':
+      case 'Dangerous':
         return Icons.warning_amber_rounded;
       default:
         return Icons.help_outline;
@@ -359,51 +366,44 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                   setState(() => _selectedStationIndex = i);
                   _showStationSheet(s);
                 },
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Center-deep color halo fading to transparent outward
-                    Container(
-                      width: haloSize,
-                      height: haloSize,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          center: Alignment.center,
-                          radius: 0.8,
-                          colors: [
-                            color.withValues(alpha: isSelected ? 0.4 : 0.25),
-                            color.withValues(alpha: 0.0),
-                          ],
-                          stops: const [0.0, 1.0],
-                        ),
-                      ),
-                    ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: baseSize,
-                      height: baseSize,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withValues(alpha: isSelected ? 0.35 : 0.2),
-                        border: Border.all(
-                          color: color,
-                          width: isSelected ? 3 : 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.5),
-                            blurRadius: isSelected ? 14 : 8,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: isSelected ? 52 : 44,
+                        height: isSelected ? 52 : 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            center: Alignment.center,
+                            radius: 0.9,
+                            stops: const [0.0, 0.35, 0.7, 1.0],
+                            colors: [
+                              color.withValues(alpha: isSelected ? 0.9 : 0.8),
+                              color.withValues(alpha: isSelected ? 0.45 : 0.32),
+                              color.withValues(alpha: isSelected ? 0.16 : 0.1),
+                              color.withValues(alpha: 0.0),
+                            ],
                           ),
-                        ],
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(
+                                alpha: isSelected ? 0.55 : 0.4,
+                              ),
+                              blurRadius: isSelected ? 16 : 10,
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Icon(
+                      Icon(
                         Icons.water_drop_rounded,
-                        color: color,
+                        color: Colors.white.withValues(alpha: 0.95),
                         size: isSelected ? 24 : 20,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -472,7 +472,7 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
   }
 
   Widget _buildFilterRow() {
-    const filters = ['All', 'Excellent', 'Good', 'Fair'];
+    const filters = ['All', 'Excellent', 'Good', 'Fair', 'Unsafe'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(

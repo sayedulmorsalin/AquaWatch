@@ -1,7 +1,6 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,8 +20,6 @@ class _DataEntryState extends State<DataEntry>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImagePicker _picker = ImagePicker();
 
   final _phController = TextEditingController();
@@ -35,7 +32,6 @@ class _DataEntryState extends State<DataEntry>
   final List<XFile> _tdsImages = [];
   final List<XFile> _ecImages = [];
   final List<XFile> _salinityImages = [];
-  final List<XFile> _temperatureImages = [];
 
   bool _isLoading = false;
 
@@ -72,13 +68,12 @@ class _DataEntryState extends State<DataEntry>
   }
 
   Future<void> _pickImages(List<XFile> images) async {
-    final pickedFiles = await _picker.pickMultiImage();
-    if (pickedFiles.isEmpty) return;
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return;
 
-    images.addAll(pickedFiles);
-    if (images.length > 4) {
-      images.removeRange(4, images.length);
-    }
+    images
+      ..clear()
+      ..add(pickedFile);
 
     setState(() {});
   }
@@ -103,53 +98,30 @@ class _DataEntryState extends State<DataEntry>
       );
     }
 
-    return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.best,
-      timeLimit: const Duration(seconds: 15),
-    );
-  }
-
-  Future<void> _saveReadingToFirestore({
-    required double ph,
-    required double tds,
-    required double ec,
-    required double salinity,
-    required double temperature,
-    required double latitude,
-    required double longitude,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw FirebaseAuthException(
-        code: 'no-current-user',
-        message: 'Please sign in before submitting data.',
-      );
+    final lastKnownPosition = await Geolocator.getLastKnownPosition();
+    if (lastKnownPosition != null) {
+      return lastKnownPosition;
     }
 
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('water_quality_readings')
-        .add({
-          'ph': ph,
-          'tds': tds,
-          'ec': ec,
-          'salinity': salinity,
-          'temperature': temperature,
-          'latitude': latitude,
-          'longitude': longitude,
-          'userId': user.uid,
-          'userEmail': user.email,
-          'userName': user.displayName,
-          'phImagePaths': _phImages.map((e) => e.path).toList(),
-          'tdsImagePaths': _tdsImages.map((e) => e.path).toList(),
-          'ecImagePaths': _ecImages.map((e) => e.path).toList(),
-          'salinityImagePaths': _salinityImages.map((e) => e.path).toList(),
-          'temperatureImagePaths': _temperatureImages
-              .map((e) => e.path)
-              .toList(),
-          'submittedAt': FieldValue.serverTimestamp(),
-        });
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 30),
+      );
+    } on TimeoutException {
+      try {
+        return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+          timeLimit: const Duration(seconds: 30),
+        );
+      } on TimeoutException {
+        return Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+          forceAndroidLocationManager: true,
+          timeLimit: const Duration(seconds: 30),
+        );
+      }
+    }
   }
 
   Future<void> _handleSubmit() async {
@@ -167,14 +139,15 @@ class _DataEntryState extends State<DataEntry>
       return;
     }
 
-    if (_phImages.length != 4 ||
-        _tdsImages.length != 4 ||
-        _ecImages.length != 4 ||
-        _salinityImages.length != 4 ||
-        _temperatureImages.length != 4) {
+    if (_phImages.length != 1 ||
+        _tdsImages.length != 1 ||
+        _ecImages.length != 1 ||
+        _salinityImages.length != 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please provide exactly 4 images for each field'),
+          content: Text(
+            'Please provide exactly 1 image for each field except temperature',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -213,58 +186,36 @@ class _DataEntryState extends State<DataEntry>
         latitude = position.latitude;
         longitude = position.longitude;
         locationSaved = true;
-      } catch (_) {
+      } on Exception catch (locationError) {
         if (!mounted) return;
-        final shouldContinue = await showDialog<bool>(
+        final locationMessage = locationError.toString();
+        final displayMessage = locationMessage.contains('disabled')
+            ? 'Your phone location is turned off. Please enable Location Services, then try again.'
+            : locationMessage.contains('permission')
+            ? 'Location permission is not available. Please allow location access in app settings, then try again.'
+            : 'Could not get location. Please check your GPS and try again.';
+
+        await showDialog<void>(
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
               title: const Text('Location unavailable'),
-              content: const Text(
-                'Could not get location. Save data without location?',
-              ),
+              content: Text(displayMessage),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
-                ),
                 ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Continue'),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('OK'),
                 ),
               ],
             );
           },
         );
 
-        if (shouldContinue != true) {
-          setState(() => _isLoading = false);
-          return;
-        }
+        setState(() => _isLoading = false);
+        return;
       }
 
-      await _saveReadingToFirestore(
-        ph: ph,
-        tds: tds,
-        ec: ec,
-        salinity: salinity,
-        temperature: temperature,
-        latitude: latitude,
-        longitude: longitude,
-      );
-
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            locationSaved
-                ? 'Data saved with location.'
-                : 'Data saved without location.',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
 
       Navigator.push(
         context,
@@ -280,7 +231,9 @@ class _DataEntryState extends State<DataEntry>
               tdsImages: _tdsImages,
               ecImages: _ecImages,
               salinityImages: _salinityImages,
-              temperatureImages: _temperatureImages,
+              latitude: latitude,
+              longitude: longitude,
+              locationCaptured: locationSaved,
             ),
           ),
         ),
@@ -289,7 +242,7 @@ class _DataEntryState extends State<DataEntry>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error saving data: $e'),
+          content: Text('Could not continue to analysis: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -460,7 +413,6 @@ class _DataEntryState extends State<DataEntry>
                                   icon: Icons.thermostat_outlined,
                                   unit: 'C',
                                   hint: '0 - 50',
-                                  images: _temperatureImages,
                                 ),
                                 const SizedBox(height: 32),
                                 _buildSubmitButton(),
@@ -531,7 +483,7 @@ class _DataEntryState extends State<DataEntry>
     required IconData icon,
     required String unit,
     required String hint,
-    required List<XFile> images,
+    List<XFile>? images,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,43 +510,45 @@ class _DataEntryState extends State<DataEntry>
             suffixText: unit,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Images: ${images.length}/4',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: () => _pickImages(images),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.2),
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Pick Images'),
-        ),
-        if (images.isNotEmpty) ...[
+        if (images != null) ...[
           const SizedBox(height: 8),
-          SizedBox(
-            height: 60,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Image.file(
-                    File(images[index].path),
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                  ),
-                );
-              },
+          Text(
+            'Image: ${images.length}/1',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 12,
             ),
           ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () => _pickImages(images),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Pick Image'),
+          ),
+          if (images.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 60,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: images.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Image.file(
+                      File(images[index].path),
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ],
     );

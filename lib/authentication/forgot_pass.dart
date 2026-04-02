@@ -1,6 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/services/auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -40,16 +39,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         _isLoading = false;
         _isSubmitted = true;
       });
-    } on FirebaseAuthException catch (e) {
+    } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_authService.readableAuthError(e)),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     } catch (_) {
       if (!mounted) return;

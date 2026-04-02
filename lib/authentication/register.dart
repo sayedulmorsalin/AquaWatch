@@ -1,7 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
 import 'package:aquawatch/services/auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -122,14 +121,11 @@ class _RegisterState extends State<Register>
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
       );
-    } on FirebaseAuthException catch (e) {
+    } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_authService.readableAuthError(e)),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     } catch (_) {
       if (!mounted) return;
