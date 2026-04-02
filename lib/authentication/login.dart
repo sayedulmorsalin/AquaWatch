@@ -3,7 +3,6 @@ import 'package:aquawatch/home.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/authentication/forgot_pass.dart';
 import 'package:aquawatch/services/auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -97,14 +96,11 @@ class _LoginPageState extends State<LoginPage>
         MaterialPageRoute(builder: (context) => const HomePage()),
         (route) => false,
       );
-    } on FirebaseAuthException catch (e) {
+    } on AuthFailure catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_authService.readableAuthError(e)),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     } catch (_) {
       if (!mounted) return;

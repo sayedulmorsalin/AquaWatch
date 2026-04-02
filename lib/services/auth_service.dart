@@ -1,6 +1,16 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+class AuthFailure implements Exception {
+  const AuthFailure({required this.message, this.code});
+
+  final String message;
+  final String? code;
+
+  @override
+  String toString() => message;
+}
+
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
     : _auth = auth ?? FirebaseAuth.instance,
@@ -11,14 +21,20 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
+  bool get isSignedIn => _auth.currentUser != null;
+
   Future<UserCredential> signIn({
     required String email,
     required String password,
-  }) {
-    return _auth.signInWithEmailAndPassword(
-      email: email.trim(),
-      password: password.trim(),
-    );
+  }) async {
+    try {
+      return await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(message: readableAuthError(e), code: e.code);
+    }
   }
 
   Future<UserCredential> registerWithProfile({
@@ -29,29 +45,37 @@ class AuthService {
     required String password,
     required String userRole,
   }) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password.trim(),
-    );
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
 
-    final user = credential.user;
-    if (user != null) {
-      await user.updateDisplayName(name.trim());
-      await _firestore.collection('users').doc(user.uid).set({
-        'name': name.trim(),
-        'phone': phone.trim(),
-        'address': address.trim(),
-        'email': email.trim(),
-        'role': userRole,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      final user = credential.user;
+      if (user != null) {
+        await user.updateDisplayName(name.trim());
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': name.trim(),
+          'phone': phone.trim(),
+          'address': address.trim(),
+          'email': email.trim(),
+          'role': userRole,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(message: readableAuthError(e), code: e.code);
     }
-
-    return credential;
   }
 
-  Future<void> sendPasswordResetEmail({required String email}) {
-    return _auth.sendPasswordResetEmail(email: email.trim());
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(message: readableAuthError(e), code: e.code);
+    }
   }
 
   Future<Map<String, dynamic>?> getCurrentUserProfile() async {

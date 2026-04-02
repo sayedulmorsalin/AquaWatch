@@ -1,6 +1,6 @@
 ﻿import 'package:aquawatch/home.dart';
 import 'package:aquawatch/authentication/register.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:aquawatch/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
@@ -30,6 +30,8 @@ class SplashGate extends StatefulWidget {
 }
 
 class _SplashGateState extends State<SplashGate> {
+  final AuthService _authService = AuthService();
+
   @override
   void initState() {
     super.initState();
@@ -40,12 +42,13 @@ class _SplashGateState extends State<SplashGate> {
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    final nextPage = user == null ? const Register() : const HomePage();
+    final nextPage = _authService.isSignedIn
+        ? const HomePage()
+        : const Register();
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => nextPage),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => nextPage));
   }
 
   @override

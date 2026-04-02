@@ -263,7 +263,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0D1B2A).withValues(alpha: 0.88),
+                          color: const Color(
+                            0xFF0D1B2A,
+                          ).withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.15),
@@ -356,21 +358,41 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color.withValues(alpha: isSelected ? 0.35 : 0.2),
-                    border: Border.all(color: color, width: isSelected ? 3 : 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.5),
-                        blurRadius: isSelected ? 14 : 8,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: isSelected ? 52 : 44,
+                        height: isSelected ? 52 : 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            center: Alignment.center,
+                            radius: 0.9,
+                            stops: const [0.0, 0.35, 0.7, 1.0],
+                            colors: [
+                              color.withValues(alpha: isSelected ? 0.9 : 0.8),
+                              color.withValues(alpha: isSelected ? 0.45 : 0.32),
+                              color.withValues(alpha: isSelected ? 0.16 : 0.1),
+                              color.withValues(alpha: 0.0),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(
+                                alpha: isSelected ? 0.55 : 0.4,
+                              ),
+                              blurRadius: isSelected ? 16 : 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.water_drop_rounded,
+                        color: Colors.white.withValues(alpha: 0.95),
+                        size: isSelected ? 24 : 20,
                       ),
                     ],
-                  ),
-                  child: Icon(
-                    Icons.water_drop_rounded,
-                    color: color,
-                    size: isSelected ? 24 : 20,
                   ),
                 ),
               ),
@@ -463,7 +485,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                       : const Color(0xFF0D1B2A).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: selected ? color : Colors.white.withValues(alpha: 0.1),
+                    color: selected
+                        ? color
+                        : Colors.white.withValues(alpha: 0.1),
                     width: selected ? 1.5 : 1,
                   ),
                 ),
@@ -617,7 +641,10 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withValues(alpha: 0.15),
-                border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.5),
+                  width: 2,
+                ),
               ),
               child: Icon(Icons.water_drop_rounded, color: color, size: 20),
             ),
@@ -684,7 +711,10 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.35)),
+          style: TextStyle(
+            fontSize: 9,
+            color: Colors.white.withValues(alpha: 0.35),
+          ),
         ),
       ],
     );
@@ -951,7 +981,11 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.4)),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.4),
+                ),
                 const SizedBox(width: 6),
                 Text(
                   label,

@@ -1,6 +1,7 @@
 ﻿import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:aquawatch/services/water_reading_service.dart';
 
 class WaterQualityData {
   final double ph;
@@ -12,7 +13,9 @@ class WaterQualityData {
   final List<XFile> tdsImages;
   final List<XFile> ecImages;
   final List<XFile> salinityImages;
-  final List<XFile> temperatureImages;
+  final double latitude;
+  final double longitude;
+  final bool locationCaptured;
 
   const WaterQualityData({
     required this.ph,
@@ -24,7 +27,9 @@ class WaterQualityData {
     required this.tdsImages,
     required this.ecImages,
     required this.salinityImages,
-    required this.temperatureImages,
+    required this.latitude,
+    required this.longitude,
+    required this.locationCaptured,
   });
 }
 
@@ -129,6 +134,9 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
   late QualityLevel _overallQuality;
   late int _overallScore;
   late String _overallSummary;
+  final WaterReadingService _waterReadingService = WaterReadingService();
+  bool _isSavingReport = false;
+  bool _reportSaved = false;
 
   @override
   void initState() {
@@ -156,6 +164,76 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) _listController.forward();
     });
+
+    _saveReportWithAnalysis();
+  }
+
+  Future<void> _saveReportWithAnalysis() async {
+    if (_isSavingReport || _reportSaved) {
+      return;
+    }
+
+    setState(() => _isSavingReport = true);
+
+    try {
+      await _waterReadingService.saveReading(
+        ph: widget.data.ph,
+        tds: widget.data.tds,
+        ec: widget.data.ec,
+        salinity: widget.data.salinity,
+        temperature: widget.data.temperature,
+        latitude: widget.data.latitude,
+        longitude: widget.data.longitude,
+        phImagePaths: widget.data.phImages.map((e) => e.path).toList(),
+        tdsImagePaths: widget.data.tdsImages.map((e) => e.path).toList(),
+        ecImagePaths: widget.data.ecImages.map((e) => e.path).toList(),
+        salinityImagePaths: widget.data.salinityImages
+            .map((e) => e.path)
+            .toList(),
+        overallQuality: _qualityLabel(_overallQuality),
+        overallScore: _overallScore,
+        overallSummary: _overallSummary,
+        parameterResults: _results
+            .map(
+              (r) => {
+                'name': r.name,
+                'unit': r.unit,
+                'value': r.value,
+                'safeRange': r.safeRange,
+                'level': _qualityLabel(r.level),
+                'remark': r.remark,
+                'score': r.score,
+              },
+            )
+            .toList(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isSavingReport = false;
+        _reportSaved = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.data.locationCaptured
+                ? 'Analysis and data saved successfully.'
+                : 'Analysis saved (without location).',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingReport = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save analysis report: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
