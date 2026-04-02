@@ -263,7 +263,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0D1B2A).withValues(alpha: 0.88),
+                          color: const Color(
+                            0xFF0D1B2A,
+                          ).withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.15),
@@ -345,33 +347,63 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
             final color = _statusColor(s['status']);
             final isSelected = _selectedStationIndex == i;
 
+            final haloSize = isSelected ? 130.0 : 100.0;
+            final baseSize = isSelected ? 52.0 : 44.0;
+
             return Marker(
               point: LatLng(s['lat'], s['lng']),
-              width: isSelected ? 52 : 44,
-              height: isSelected ? 52 : 44,
+              width: haloSize,
+              height: haloSize,
               builder: (ctx) => GestureDetector(
                 onTap: () {
                   setState(() => _selectedStationIndex = i);
                   _showStationSheet(s);
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color.withValues(alpha: isSelected ? 0.35 : 0.2),
-                    border: Border.all(color: color, width: isSelected ? 3 : 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.5),
-                        blurRadius: isSelected ? 14 : 8,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Center-deep color halo fading to transparent outward
+                    Container(
+                      width: haloSize,
+                      height: haloSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          center: Alignment.center,
+                          radius: 0.8,
+                          colors: [
+                            color.withValues(alpha: isSelected ? 0.4 : 0.25),
+                            color.withValues(alpha: 0.0),
+                          ],
+                          stops: const [0.0, 1.0],
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.water_drop_rounded,
-                    color: color,
-                    size: isSelected ? 24 : 20,
-                  ),
+                    ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: baseSize,
+                      height: baseSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(alpha: isSelected ? 0.35 : 0.2),
+                        border: Border.all(
+                          color: color,
+                          width: isSelected ? 3 : 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.5),
+                            blurRadius: isSelected ? 14 : 8,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.water_drop_rounded,
+                        color: color,
+                        size: isSelected ? 24 : 20,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -463,7 +495,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                       : const Color(0xFF0D1B2A).withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: selected ? color : Colors.white.withValues(alpha: 0.1),
+                    color: selected
+                        ? color
+                        : Colors.white.withValues(alpha: 0.1),
                     width: selected ? 1.5 : 1,
                   ),
                 ),
@@ -617,7 +651,10 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withValues(alpha: 0.15),
-                border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.5),
+                  width: 2,
+                ),
               ),
               child: Icon(Icons.water_drop_rounded, color: color, size: 20),
             ),
@@ -684,7 +721,10 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.35)),
+          style: TextStyle(
+            fontSize: 9,
+            color: Colors.white.withValues(alpha: 0.35),
+          ),
         ),
       ],
     );
@@ -951,7 +991,11 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.4)),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.4),
+                ),
                 const SizedBox(width: 6),
                 Text(
                   label,
