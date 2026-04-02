@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/morsalin/data_entry.dart';
 import 'package:aquawatch/profile/profile_page.dart';
+import 'package:aquawatch/authority/verify_user_readings_page.dart';
 import 'package:aquawatch/touhid-e-khuda/geo_map.dart';
 import 'package:aquawatch/services/auth_service.dart';
 
@@ -213,6 +214,24 @@ class _HomePageState extends State<HomePage>
                                 );
                               },
                             ),
+                            if (_userRole == 'Authority') ...[
+                              const SizedBox(height: 16),
+                              _buildNavigationCard(
+                                title: 'Verify Submissions',
+                                description:
+                                    'Review and approve water quality reports',
+                                icon: Icons.verified_user_rounded,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const VerifyUserReadingsPage(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                             const SizedBox(height: 40),
                           ],
                         ),

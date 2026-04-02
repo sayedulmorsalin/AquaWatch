@@ -184,12 +184,10 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
         temperature: widget.data.temperature,
         latitude: widget.data.latitude,
         longitude: widget.data.longitude,
-        phImagePaths: widget.data.phImages.map((e) => e.path).toList(),
-        tdsImagePaths: widget.data.tdsImages.map((e) => e.path).toList(),
-        ecImagePaths: widget.data.ecImages.map((e) => e.path).toList(),
-        salinityImagePaths: widget.data.salinityImages
-            .map((e) => e.path)
-            .toList(),
+        phImagePath: widget.data.phImages.first.path,
+        tdsImagePath: widget.data.tdsImages.first.path,
+        ecImagePath: widget.data.ecImages.first.path,
+        salinityImagePath: widget.data.salinityImages.first.path,
         overallQuality: _qualityLabel(_overallQuality),
         overallScore: _overallScore,
         overallSummary: _overallSummary,
