@@ -354,10 +354,13 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
             final color = _statusColor(s['status']);
             final isSelected = _selectedStationIndex == i;
 
+            final haloSize = isSelected ? 130.0 : 100.0;
+            final baseSize = isSelected ? 52.0 : 44.0;
+
             return Marker(
               point: LatLng(s['lat'], s['lng']),
-              width: isSelected ? 52 : 44,
-              height: isSelected ? 52 : 44,
+              width: haloSize,
+              height: haloSize,
               builder: (ctx) => GestureDetector(
                 onTap: () {
                   setState(() => _selectedStationIndex = i);
