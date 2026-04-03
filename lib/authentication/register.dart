@@ -99,6 +99,19 @@ class _RegisterState extends State<Register>
       return;
     }
 
+    if (_selectedUserType == 'Authority' &&
+        _authorityCodeController.text.trim() != '1720') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Invalid authority verification code. Please use 1720 for admin registration.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await _authService.registerWithProfile(
