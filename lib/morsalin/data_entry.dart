@@ -2,10 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'data_analysis_report.dart';
+
+enum LocationInputMode { auto, manual }
 
 class DataEntry extends StatefulWidget {
   const DataEntry({super.key});
@@ -27,6 +31,8 @@ class _DataEntryState extends State<DataEntry>
   final _ecController = TextEditingController();
   final _salinityController = TextEditingController();
   final _temperatureController = TextEditingController();
+  final _manualLatitudeController = TextEditingController();
+  final _manualLongitudeController = TextEditingController();
 
   final List<XFile> _phImages = [];
   final List<XFile> _tdsImages = [];
@@ -34,6 +40,10 @@ class _DataEntryState extends State<DataEntry>
   final List<XFile> _salinityImages = [];
 
   bool _isLoading = false;
+  LocationInputMode _locationMode = LocationInputMode.auto;
+  LatLng _manualMapCenter = LatLng(23.8103, 90.4125);
+  LatLng? _selectedManualLocation;
+  bool _isLocatingMapStart = false;
 
   @override
   void initState() {
@@ -64,6 +74,8 @@ class _DataEntryState extends State<DataEntry>
     _ecController.dispose();
     _salinityController.dispose();
     _temperatureController.dispose();
+    _manualLatitudeController.dispose();
+    _manualLongitudeController.dispose();
     super.dispose();
   }
 
@@ -174,6 +186,18 @@ class _DataEntryState extends State<DataEntry>
       return;
     }
 
+    if (_locationMode == LocationInputMode.manual) {
+      if (_selectedManualLocation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Select a location from the map before submitting'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -181,38 +205,44 @@ class _DataEntryState extends State<DataEntry>
       var longitude = 0.0;
       var locationSaved = false;
 
-      try {
-        final position = await _getUserLocation();
-        latitude = position.latitude;
-        longitude = position.longitude;
+      if (_locationMode == LocationInputMode.manual) {
+        latitude = _selectedManualLocation!.latitude;
+        longitude = _selectedManualLocation!.longitude;
         locationSaved = true;
-      } on Exception catch (locationError) {
-        if (!mounted) return;
-        final locationMessage = locationError.toString();
-        final displayMessage = locationMessage.contains('disabled')
-            ? 'Your phone location is turned off. Please enable Location Services, then try again.'
-            : locationMessage.contains('permission')
-            ? 'Location permission is not available. Please allow location access in app settings, then try again.'
-            : 'Could not get location. Please check your GPS and try again.';
+      } else {
+        try {
+          final position = await _getUserLocation();
+          latitude = position.latitude;
+          longitude = position.longitude;
+          locationSaved = true;
+        } on Exception catch (locationError) {
+          if (!mounted) return;
+          final locationMessage = locationError.toString();
+          final displayMessage = locationMessage.contains('disabled')
+              ? 'Your phone location is turned off. Please enable Location Services, then try again.'
+              : locationMessage.contains('permission')
+              ? 'Location permission is not available. Please allow location access in app settings, then try again.'
+              : 'Could not get location. Please check your GPS and try again.';
 
-        await showDialog<void>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('Location unavailable'),
-              content: Text(displayMessage),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) {
+              return AlertDialog(
+                title: const Text('Location unavailable'),
+                content: Text(displayMessage),
+                actions: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
 
-        setState(() => _isLoading = false);
-        return;
+          setState(() => _isLoading = false);
+          return;
+        }
       }
 
       if (!mounted) return;
@@ -414,6 +444,8 @@ class _DataEntryState extends State<DataEntry>
                                   unit: 'C',
                                   hint: '0 - 50',
                                 ),
+                                const SizedBox(height: 16),
+                                _buildLocationSelector(),
                                 const SizedBox(height: 32),
                                 _buildSubmitButton(),
                                 const SizedBox(height: 30),
@@ -552,6 +584,219 @@ class _DataEntryState extends State<DataEntry>
         ],
       ],
     );
+  }
+
+  Widget _buildLocationSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Location',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.9),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildLocationModeButton(
+                text: 'Auto Select',
+                selected: _locationMode == LocationInputMode.auto,
+                onTap: () {
+                  setState(() {
+                    _locationMode = LocationInputMode.auto;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildLocationModeButton(
+                text: 'Select Own',
+                selected: _locationMode == LocationInputMode.manual,
+                onTap: () {
+                  setState(() {
+                    _locationMode = LocationInputMode.manual;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        if (_locationMode == LocationInputMode.manual) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 220,
+                child: FlutterMap(
+                  options: MapOptions(
+                    center: _selectedManualLocation ?? _manualMapCenter,
+                    zoom: 12,
+                    onTap: (_, point) {
+                      setState(() {
+                        _selectedManualLocation = point;
+                        _manualLatitudeController.text = point.latitude
+                            .toStringAsFixed(6);
+                        _manualLongitudeController.text = point.longitude
+                            .toStringAsFixed(6);
+                      });
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.aquawatch',
+                    ),
+                    if (_selectedManualLocation != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _selectedManualLocation!,
+                            width: 44,
+                            height: 44,
+                            builder: (context) {
+                              return const Icon(
+                                Icons.location_pin,
+                                color: Colors.redAccent,
+                                size: 44,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _selectedManualLocation == null
+                      ? 'Tap on map to select location.'
+                      : 'Selected: ${_selectedManualLocation!.latitude.toStringAsFixed(6)}, ${_selectedManualLocation!.longitude.toStringAsFixed(6)}',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              TextButton.icon(
+                onPressed: _isLocatingMapStart
+                    ? null
+                    : _centerMapOnCurrentLocation,
+                icon: _isLocatingMapStart
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location, color: Colors.white),
+                label: const Text(
+                  'Use Current',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'We will use your current device location automatically.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLocationModeButton({
+    required String text,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: selected
+                ? Colors.cyanAccent.withValues(alpha: 0.85)
+                : const Color(0xFF113552).withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.35),
+              width: selected ? 1.6 : 1.1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: selected ? Colors.blue.shade900 : Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _centerMapOnCurrentLocation() async {
+    setState(() => _isLocatingMapStart = true);
+
+    try {
+      final position = await _getUserLocation();
+      if (!mounted) return;
+
+      setState(() {
+        final point = LatLng(position.latitude, position.longitude);
+        _manualMapCenter = point;
+        _selectedManualLocation = point;
+        _manualLatitudeController.text = point.latitude.toStringAsFixed(6);
+        _manualLongitudeController.text = point.longitude.toStringAsFixed(6);
+      });
+    } on Exception catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not get current location for map: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLocatingMapStart = false);
+      }
+    }
   }
 
   Widget _buildSubmitButton() {
