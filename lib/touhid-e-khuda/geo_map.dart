@@ -63,8 +63,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filtered = _waterStations.where((s) {
+        final status = _normalizeStatus(s['status']);
         final matchesStatus =
-            _selectedFilter == 'All' || s['status'] == _selectedFilter;
+            _selectedFilter == 'All' || status == _selectedFilter;
         final matchesQuery =
             query.isEmpty ||
             s['name'].toString().toLowerCase().contains(query) ||
@@ -89,7 +90,7 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                 return <String, dynamic>{};
               }
 
-              final status = (data['overallQuality'] ?? 'Unknown').toString();
+              final status = _normalizeStatus(data['overallQuality']);
               final userName = (data['userName'] ?? 'Submitted Reading')
                   .toString();
               final submittedBy = (data['userEmail'] ?? 'Unknown').toString();
@@ -118,16 +119,35 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     _applyFilters();
   }
 
+  String _normalizeStatus(dynamic rawStatus) {
+    final value = (rawStatus ?? '').toString().trim().toLowerCase();
+    switch (value) {
+      case 'excellent':
+        return 'Excellent';
+      case 'good':
+        return 'Good';
+      case 'acceptable':
+      case 'fair':
+        return 'Acceptable';
+      case 'poor':
+        return 'Poor';
+      case 'unsafe':
+      case 'dangerous':
+        return 'Dangerous';
+      default:
+        return 'Unknown';
+    }
+  }
+
   Color _statusColor(String status) {
     switch (status) {
       case 'Excellent':
         return const Color(0xFF00E676);
       case 'Good':
         return const Color(0xFF29B6F6);
-      case 'Fair':
+      case 'Acceptable':
         return const Color(0xFFFFA726);
       case 'Poor':
-      case 'Unsafe':
       case 'Dangerous':
         return const Color(0xFFFF5252);
       default:
@@ -141,10 +161,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
         return Icons.verified_rounded;
       case 'Good':
         return Icons.thumb_up_alt_rounded;
-      case 'Fair':
+      case 'Acceptable':
         return Icons.info_rounded;
       case 'Poor':
-      case 'Unsafe':
       case 'Dangerous':
         return Icons.warning_amber_rounded;
       default:
@@ -372,8 +391,8 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
                     alignment: Alignment.center,
                     children: [
                       Container(
-                        width: isSelected ? 52 : 44,
-                        height: isSelected ? 52 : 44,
+                        width: baseSize,
+                        height: baseSize,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: RadialGradient(
@@ -472,7 +491,14 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
   }
 
   Widget _buildFilterRow() {
-    const filters = ['All', 'Excellent', 'Good', 'Fair', 'Unsafe'];
+    const filters = [
+      'All',
+      'Excellent',
+      'Good',
+      'Acceptable',
+      'Poor',
+      'Dangerous',
+    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
