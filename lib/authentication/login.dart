@@ -19,11 +19,9 @@ class _LoginPageState extends State<LoginPage>
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authorityCodeController = TextEditingController();
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
-  String _selectedUserType = 'User';
   final _authService = AuthService();
 
   @override
@@ -51,7 +49,6 @@ class _LoginPageState extends State<LoginPage>
     _animationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _authorityCodeController.dispose();
     super.dispose();
   }
 
@@ -60,17 +57,6 @@ class _LoginPageState extends State<LoginPage>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill in all fields'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_selectedUserType == 'Authority' &&
-        _authorityCodeController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the authority verification code'),
           backgroundColor: Colors.red,
         ),
       );
@@ -227,21 +213,6 @@ class _LoginPageState extends State<LoginPage>
                                 position: _slideAnimation,
                                 child: Column(
                                   children: [
-                                    _buildUserTypeDropdown(),
-                                    const SizedBox(height: 20),
-                                    if (_selectedUserType == 'Authority')
-                                      Column(
-                                        children: [
-                                          _buildTextField(
-                                            controller:
-                                                _authorityCodeController,
-                                            label:
-                                                'Authority Verification Code',
-                                            icon: Icons.verified_user_outlined,
-                                          ),
-                                          const SizedBox(height: 20),
-                                        ],
-                                      ),
                                     _buildTextField(
                                       controller: _emailController,
                                       label: 'Email or Phone',
@@ -433,45 +404,6 @@ class _LoginPageState extends State<LoginPage>
             color: Colors.white.withValues(alpha: 0.85),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildUserTypeDropdown() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-      ),
-      child: DropdownButtonFormField<String>(
-        value: _selectedUserType,
-        dropdownColor: Colors.blue.shade900,
-        icon: Icon(
-          Icons.arrow_drop_down,
-          color: Colors.white.withValues(alpha: 0.85),
-        ),
-        decoration: InputDecoration(
-          prefixIcon: Icon(
-            Icons.people_outline,
-            color: Colors.white.withValues(alpha: 0.85),
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
-        ),
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        items: const [
-          DropdownMenuItem(value: 'User', child: Text('User')),
-          DropdownMenuItem(value: 'Authority', child: Text('Authority')),
-        ],
-        onChanged: (value) {
-          if (value != null) {
-            setState(() => _selectedUserType = value);
-          }
-        },
       ),
     );
   }
