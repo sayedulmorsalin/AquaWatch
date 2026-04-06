@@ -42,7 +42,7 @@ class ReadingVerificationService {
         .collection('water_quality_readings')
         .snapshots()
         .listen((snapshot) {
-          rootDocs = snapshot.docs;
+          rootDocs = snapshot.docs; 
           emitMerged();
         }, onError: controller.addError);
 
