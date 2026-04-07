@@ -1,4 +1,4 @@
-﻿import 'package:aquawatch/home.dart';
+﻿import 'package:aquawatch/home/home.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';

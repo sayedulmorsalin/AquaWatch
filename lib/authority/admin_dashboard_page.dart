@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:async/async.dart';
 import 'package:flutter/material.dart';
-import 'package:aquawatch/touhid-e-khuda/geo_map.dart';
+import 'package:aquawatch/visualize%20data/geo_map.dart';
 
 import 'bangladesh_area_data.dart';
 import 'verify_user_readings_page.dart';
