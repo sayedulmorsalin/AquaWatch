@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:async/async.dart';
 import 'package:flutter/material.dart';
-import 'package:aquawatch/visualize%20data/geo_map.dart';
+import 'package:aquawatch/visualize_data/geo_map.dart';
 
 import 'bangladesh_area_data.dart';
 import 'verify_user_readings_page.dart';
@@ -571,7 +571,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                         height: 260,
                         child: ListView.separated(
                           itemCount: result.reports.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final report = result.reports[index];
                             return _buildAreaReportCard(report);
@@ -710,41 +711,29 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     final normalizedDistrict = _normalizeText(district);
     final normalizedThana = _normalizeText(thana);
 
-    final snapshots = await Future.wait([
-      firestore.collection('water_quality_readings').get(),
-      firestore.collection('verified_water_quality_readings').get(),
-    ]);
+    // Query only the main water_quality_readings collection with all statuses
+    final snapshot = await firestore.collection('water_quality_readings').get();
 
     final reports = <_AreaWaterReport>[];
-
     var pending = 0;
-    var rejected = 0;
-    for (final doc in snapshots[0].docs) {
-      final data = doc.data();
-      if (!_matchesArea(data, normalizedDistrict, normalizedThana)) {
-        continue;
-      }
-
-      final status =
-          (data['verificationStatus'] ?? 'pending').toString().toLowerCase();
-      if (status == 'pending') {
-        pending++;
-      }
-      if (status == 'rejected') {
-        rejected++;
-      }
-
-      reports.add(_toAreaWaterReport(data, status: status));
-    }
-
     var approved = 0;
-    for (final doc in snapshots[1].docs) {
+    var rejected = 0;
+
+    for (final doc in snapshot.docs) {
       final data = doc.data();
       if (!_matchesArea(data, normalizedDistrict, normalizedThana)) {
         continue;
       }
-      approved++;
-      reports.add(_toAreaWaterReport(data, status: 'approved'));
+
+      final status = (data['verificationStatus'] ?? 'pending')
+          .toString()
+          .toLowerCase();
+
+      if (status == 'pending') pending++;
+      if (status == 'approved') approved++;
+      if (status == 'rejected') rejected++;
+
+      reports.add(await _toAreaWaterReport(data, status: status));
     }
 
     reports.sort((a, b) {
@@ -761,14 +750,34 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  _AreaWaterReport _toAreaWaterReport(
+  Future<_AreaWaterReport> _toAreaWaterReport(
     Map<String, dynamic> data, {
     required String status,
-  }) {
+  }) async {
+    String userName = 'Unknown User';
+    String userEmail = 'Unknown Email';
+
+    final userId = data['userId']?.toString();
+    if (userId != null && userId.isNotEmpty) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          userName = userData?['name']?.toString() ?? userName;
+          userEmail = userData?['email']?.toString() ?? userEmail;
+        }
+      } catch (_) {
+        // Use defaults if fetch fails
+      }
+    }
+
     return _AreaWaterReport(
       status: status[0].toUpperCase() + status.substring(1),
-      userName: (data['userName'] ?? 'Unknown User').toString(),
-      userEmail: (data['userEmail'] ?? 'Unknown Email').toString(),
+      userName: userName,
+      userEmail: userEmail,
       overallQuality: (data['overallQuality'] ?? '').toString(),
       ph: (data['ph'] as num?)?.toDouble() ?? 0,
       tds: (data['tds'] as num?)?.toDouble() ?? 0,
@@ -776,7 +785,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       salinity: (data['salinity'] as num?)?.toDouble() ?? 0,
       temperature: (data['temperature'] as num?)?.toDouble() ?? 0,
       submittedAt:
-          (data['approvedAt'] as Timestamp?)?.toDate() ??
+          (data['verifiedAt'] as Timestamp?)?.toDate() ??
           (data['submittedAt'] as Timestamp?)?.toDate(),
     );
   }

@@ -15,6 +15,7 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
       ReadingVerificationService();
   final AuthService _authService = AuthService();
   final _searchController = TextEditingController();
+  final _firestore = FirebaseFirestore.instance;
   String _query = '';
 
   @override
@@ -45,12 +46,20 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
     return '-';
   }
 
+  Future<Map<String, dynamic>?> _getUserDetails(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      return doc.data();
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool _matchesQuery(Map<String, dynamic> data) {
     if (_query.isEmpty) return true;
     final text = _query.toLowerCase();
     return [
-      data['userName'],
-      data['userEmail'],
+      data['userId'],
       data['verificationStatus'],
       data['overallQuality'],
       data['ph'],
@@ -159,7 +168,7 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
     }
   }
 
-  void _openDetails(Map<String, dynamic> data) {
+  void _openDetails(Map<String, dynamic> data, String userId) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -174,118 +183,134 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
               .cast<String>(),
         ];
 
-        return Container(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0D1B2A),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 44,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    data['userName']?.toString() ?? 'Unknown user',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    data['userEmail']?.toString() ?? '-',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+        return FutureBuilder<Map<String, dynamic>?>(
+          future: _getUserDetails(userId),
+          builder: (context, snapshot) {
+            final userName =
+                snapshot.data?['name']?.toString() ?? 'Unknown user';
+            final userEmail = snapshot.data?['email']?.toString() ?? '-';
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1B2A),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _infoChip('pH ${_formatValue(data['ph'])}'),
-                      _infoChip('TDS ${_formatValue(data['tds'])}'),
-                      _infoChip('EC ${_formatValue(data['ec'])}'),
-                      _infoChip('Salinity ${_formatValue(data['salinity'])}'),
-                      _infoChip('Temp ${_formatValue(data['temperature'])}'),
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        userName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        userEmail,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _infoChip('pH ${_formatValue(data['ph'])}'),
+                          _infoChip('TDS ${_formatValue(data['tds'])}'),
+                          _infoChip('EC ${_formatValue(data['ec'])}'),
+                          _infoChip(
+                            'Salinity ${_formatValue(data['salinity'])}',
+                          ),
+                          _infoChip(
+                            'Temp ${_formatValue(data['temperature'])}',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Overall: ${data['overallQuality'] ?? '-'} (${data['overallScore'] ?? '-'}/100)',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Location: ${_formatValue(data['latitude'])}, ${_formatValue(data['longitude'])}',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Attached Images',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (images.isEmpty)
+                        Text(
+                          'No images attached.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          height: 120,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: images.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (_, index) {
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  images[index],
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 120,
+                                    height: 120,
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.image_not_supported_outlined,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Overall: ${data['overallQuality'] ?? '-'} (${data['overallScore'] ?? '-'}/100)',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Location: ${_formatValue(data['latitude'])}, ${_formatValue(data['longitude'])}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Attached Images',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  if (images.isEmpty)
-                    Text(
-                      'No images attached.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      height: 120,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: images.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (_, index) {
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              images[index],
-                              width: 120,
-                              height: 120,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 120,
-                                height: 120,
-                                color: Colors.white.withValues(alpha: 0.08),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.image_not_supported_outlined,
-                                  color: Colors.white54,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -494,8 +519,7 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            data['userName']?.toString() ??
-                                                'Unknown user',
+                                            'Submission',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 15,
@@ -504,14 +528,15 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            data['userEmail']?.toString() ??
-                                                '-',
+                                            data['userId']?.toString() ?? '-',
                                             style: TextStyle(
                                               color: Colors.white.withValues(
                                                 alpha: 0.7,
                                               ),
                                               fontSize: 12,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
+                                            maxLines: 1,
                                           ),
                                         ],
                                       ),
@@ -582,7 +607,10 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                   children: [
                                     Expanded(
                                       child: OutlinedButton.icon(
-                                        onPressed: () => _openDetails(data),
+                                        onPressed: () => _openDetails(
+                                          data,
+                                          data['userId']?.toString() ?? '',
+                                        ),
                                         icon: const Icon(
                                           Icons.visibility_outlined,
                                         ),

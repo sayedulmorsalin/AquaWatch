@@ -33,8 +33,9 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     _filtered = [];
     _mapController = MapController();
     _verifiedReadingsSub = FirebaseFirestore.instance
-        .collection('verified_water_quality_readings')
-        .orderBy('approvedAt', descending: true)
+        .collection('water_quality_readings')
+        .where('verificationStatus', isEqualTo: 'approved')
+        .orderBy('verifiedAt', descending: true)
         .snapshots()
         .listen((snapshot) {
           if (!mounted) return;
@@ -77,41 +78,55 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
 
   void _syncVerifiedReadings(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    _waterStations
-      ..clear()
-      ..addAll(
-        docs
-            .map((doc) {
-              final data = doc.data();
-              final lat = (data['latitude'] as num?)?.toDouble();
-              final lng = (data['longitude'] as num?)?.toDouble();
-              if (lat == null || lng == null) {
-                return <String, dynamic>{};
-              }
+  ) async {
+    final firestore = FirebaseFirestore.instance;
+    _waterStations.clear();
 
-              final status = _normalizeStatus(data['overallQuality']);
-              final userName = (data['userName'] ?? 'Submitted Reading')
-                  .toString();
-              final submittedBy = (data['userEmail'] ?? 'Unknown').toString();
+    for (final doc in docs) {
+      final data = doc.data();
+      final lat = (data['latitude'] as num?)?.toDouble();
+      final lng = (data['longitude'] as num?)?.toDouble();
+      if (lat == null || lng == null) {
+        continue;
+      }
 
-              return {
-                'name': userName,
-                'area': submittedBy,
-                'ph': (data['ph'] as num?)?.toDouble() ?? 0.0,
-                'tds': (data['tds'] as num?)?.toDouble() ?? 0.0,
-                'ec': (data['ec'] as num?)?.toDouble() ?? 0.0,
-                'salinity': (data['salinity'] as num?)?.toDouble() ?? 0.0,
-                'temperature': (data['temperature'] as num?)?.toDouble() ?? 0.0,
-                'status': status,
-                'lat': lat,
-                'lng': lng,
-              };
-            })
-            .where((item) => item.isNotEmpty),
-      );
+      final userId = data['userId']?.toString();
+      String userName = 'Submitted Reading';
+      String submittedBy = 'Unknown';
 
-    _applyFilters();
+      // Fetch user details if userId is available
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          final userDoc = await firestore.collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            final userData = userDoc.data();
+            userName = userData?['name']?.toString() ?? userName;
+            submittedBy = userData?['email']?.toString() ?? submittedBy;
+          }
+        } catch (_) {
+          // If fetch fails, use defaults
+        }
+      }
+
+      final status = _normalizeStatus(data['overallQuality']);
+
+      _waterStations.add({
+        'name': userName,
+        'area': submittedBy,
+        'ph': (data['ph'] as num?)?.toDouble() ?? 0.0,
+        'tds': (data['tds'] as num?)?.toDouble() ?? 0.0,
+        'ec': (data['ec'] as num?)?.toDouble() ?? 0.0,
+        'salinity': (data['salinity'] as num?)?.toDouble() ?? 0.0,
+        'temperature': (data['temperature'] as num?)?.toDouble() ?? 0.0,
+        'status': status,
+        'lat': lat,
+        'lng': lng,
+      });
+    }
+
+    if (mounted) {
+      _applyFilters();
+    }
   }
 
   void _selectFilter(String status) {
