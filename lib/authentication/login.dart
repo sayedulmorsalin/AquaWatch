@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:aquawatch/home.dart';
+import 'package:aquawatch/home/home.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/authentication/forgot_pass.dart';
 import 'package:aquawatch/services/auth_service.dart';
