@@ -1,8 +1,8 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:aquawatch/water%20quality%20detection/data_entry.dart';
+import 'package:aquawatch/water_quality_detection/data_entry.dart';
 import 'package:aquawatch/profile/profile_page.dart';
 import 'package:aquawatch/authority/admin_dashboard_page.dart';
-import 'package:aquawatch/visualize%20data/geo_map.dart';
+import 'package:aquawatch/visualize_data/geo_map.dart';
 import 'package:aquawatch/services/auth_service.dart';
 
 class HomePage extends StatefulWidget {

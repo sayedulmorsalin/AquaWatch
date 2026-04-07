@@ -119,14 +119,7 @@ class WaterReadingService {
       );
     }
 
-    final docRef = _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('water_quality_readings')
-        .doc();
-    final rootRef = _firestore
-        .collection('water_quality_readings')
-        .doc(docRef.id);
+    final readingRef = _firestore.collection('water_quality_readings').doc();
 
     final phImageUrl = await _uploadToFreeImageHost(phImagePath);
     final tdsImageUrl = await _uploadToFreeImageHost(tdsImagePath);
@@ -142,8 +135,6 @@ class WaterReadingService {
       'latitude': latitude,
       'longitude': longitude,
       'userId': user.uid,
-      'userEmail': user.email,
-      'userName': user.displayName,
       'phImageUrls': [phImageUrl],
       'tdsImageUrls': [tdsImageUrl],
       'ecImageUrls': [ecImageUrl],
@@ -165,13 +156,6 @@ class WaterReadingService {
       payload['parameterResults'] = parameterResults;
     }
 
-    await rootRef.set(payload);
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('water_quality_readings')
-        .doc(docRef.id)
-        .set(payload);
+    await readingRef.set(payload);
   }
 }
