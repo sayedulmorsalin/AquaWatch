@@ -145,8 +145,7 @@ class _DataEntryState extends State<DataEntry>
       final timestamp = lastKnownPosition.timestamp;
       if (timestamp == null) return lastKnownPosition;
 
-      if (DateTime.now().difference(timestamp) <=
-          const Duration(minutes: 10)) {
+      if (DateTime.now().difference(timestamp) <= const Duration(minutes: 10)) {
         return lastKnownPosition;
       }
     } on Exception {
@@ -792,10 +791,45 @@ class _DataEntryState extends State<DataEntry>
               child: _buildLocationModeButton(
                 text: 'Auto Select',
                 selected: _locationMode == LocationInputMode.auto,
-                onTap: () {
+                onTap: () async {
                   setState(() {
                     _locationMode = LocationInputMode.auto;
                   });
+
+                  // Check location service status first
+                  final serviceEnabled =
+                      await Geolocator.isLocationServiceEnabled();
+                  if (!serviceEnabled && mounted) {
+                    // Show immediate dialog to enable location
+                    await showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) {
+                        return AlertDialog(
+                          title: const Text('Enable Location Services'),
+                          content: const Text(
+                            'Location services are currently disabled. Please enable Location Services to use Auto Select location feature.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                _retryAutoLocationOnResume = true;
+                                await Geolocator.openLocationSettings();
+                              },
+                              child: const Text('Enable Location'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                    return;
+                  }
+
                   _captureAutoLocation(showErrorSnack: false);
                 },
               ),

@@ -159,7 +159,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         .where('verificationStatus', isEqualTo: 'pending')
         .snapshots();
     final approved = firestore
-        .collection('verified_water_quality_readings')
+        .collection('water_quality_readings')
+        .where('verificationStatus', isEqualTo: 'approved')
         .snapshots();
     final rejected = firestore
         .collection('water_quality_readings')
@@ -779,11 +780,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       userName: userName,
       userEmail: userEmail,
       overallQuality: (data['overallQuality'] ?? '').toString(),
-      ph: (data['ph'] as num?)?.toDouble() ?? 0,
-      tds: (data['tds'] as num?)?.toDouble() ?? 0,
-      ec: (data['ec'] as num?)?.toDouble() ?? 0,
-      salinity: (data['salinity'] as num?)?.toDouble() ?? 0,
-      temperature: (data['temperature'] as num?)?.toDouble() ?? 0,
+      ph: _parseDouble(data['ph']) ?? 0,
+      tds: _parseDouble(data['tds']) ?? 0,
+      ec: _parseDouble(data['ec']) ?? 0,
+      salinity: _parseDouble(data['salinity']) ?? 0,
+      temperature: _parseDouble(data['temperature']) ?? 0,
       submittedAt:
           (data['verifiedAt'] as Timestamp?)?.toDate() ??
           (data['submittedAt'] as Timestamp?)?.toDate(),
@@ -851,6 +852,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   String _normalizeText(String value) {
     return value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  double? _parseDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }
 
