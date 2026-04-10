@@ -72,10 +72,11 @@ class _LoginPageState extends State<LoginPage>
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Login successful!'),
-          backgroundColor: Colors.green,
-        ),
+       const SnackBar(
+        content: Text('Login successful!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
       );
       Navigator.pushAndRemoveUntil(
         context,
