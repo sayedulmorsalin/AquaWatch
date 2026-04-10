@@ -426,7 +426,7 @@ class _LoginPageState extends State<LoginPage>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _isLoading ? null : _handleLogin,
+         onTap: _isLoading ? () {} : _handleLogin,
           borderRadius: BorderRadius.circular(12),
           child: _isLoading
               ? const Center(
