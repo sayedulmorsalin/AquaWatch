@@ -19,7 +19,7 @@ class DataEntry extends StatefulWidget {
 }
 
 class _DataEntryState extends State<DataEntry>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -43,11 +43,17 @@ class _DataEntryState extends State<DataEntry>
   LocationInputMode _locationMode = LocationInputMode.auto;
   LatLng _manualMapCenter = LatLng(23.8103, 90.4125);
   LatLng? _selectedManualLocation;
+  LatLng? _autoSelectedLocation;
+  String? _autoLocationError;
+  bool _isLocatingAuto = false;
   bool _isLocatingMapStart = false;
+  bool _retryAutoLocationOnResume = false;
+  bool _retryManualLocationOnResume = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
@@ -64,10 +70,16 @@ class _DataEntryState extends State<DataEntry>
         );
 
     _animationController.forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _locationMode != LocationInputMode.auto) return;
+      _captureAutoLocation();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _animationController.dispose();
     _phController.dispose();
     _tdsController.dispose();
@@ -77,6 +89,22 @@ class _DataEntryState extends State<DataEntry>
     _manualLatitudeController.dispose();
     _manualLongitudeController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+
+    if (_retryAutoLocationOnResume && _locationMode == LocationInputMode.auto) {
+      _retryAutoLocationOnResume = false;
+      _captureAutoLocation(showErrorSnack: false);
+    }
+
+    if (_retryManualLocationOnResume &&
+        _locationMode == LocationInputMode.manual) {
+      _retryManualLocationOnResume = false;
+      _centerMapOnCurrentLocation();
+    }
   }
 
   Future<void> _pickImages(List<XFile> images) async {
@@ -91,47 +119,198 @@ class _DataEntryState extends State<DataEntry>
   }
 
   Future<Position> _getUserLocation() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final hasPermission = await _ensureLocationPermission();
+    if (!hasPermission) {
+      throw Exception('Location permission denied.');
+    }
+
+    final serviceEnabled = await _ensureLocationServiceEnabled();
     if (!serviceEnabled) {
       throw Exception('Location services are disabled. Please enable them.');
     }
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw Exception('Location permission denied.');
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception(
-        'Location permission is permanently denied. Enable it in app settings.',
-      );
-    }
-
-    final lastKnownPosition = await Geolocator.getLastKnownPosition();
+    final lastKnownPosition = await _getRecentLastKnownPosition();
     if (lastKnownPosition != null) {
       return lastKnownPosition;
     }
 
+    return _getFreshLocation();
+  }
+
+  Future<Position?> _getRecentLastKnownPosition() async {
+    try {
+      final lastKnownPosition = await Geolocator.getLastKnownPosition();
+      if (lastKnownPosition == null) return null;
+
+      final timestamp = lastKnownPosition.timestamp;
+      if (timestamp == null) return lastKnownPosition;
+
+      if (DateTime.now().difference(timestamp) <= const Duration(minutes: 10)) {
+        return lastKnownPosition;
+      }
+    } on Exception {
+      // Fall through to a fresh GPS lookup if cached data is unavailable.
+    }
+
+    return null;
+  }
+
+  Future<Position> _getFreshLocation() async {
     try {
       return await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 30),
+        timeLimit: const Duration(seconds: 20),
       );
     } on TimeoutException {
       try {
         return await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.low,
-          timeLimit: const Duration(seconds: 30),
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 20),
         );
       } on TimeoutException {
-        return Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.low,
-          forceAndroidLocationManager: true,
-          timeLimit: const Duration(seconds: 30),
+        try {
+          return await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.low,
+            forceAndroidLocationManager: true,
+            timeLimit: const Duration(seconds: 20),
+          );
+        } on TimeoutException {
+          return Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 0,
+            ),
+          ).first.timeout(const Duration(seconds: 15));
+        }
+      }
+    }
+  }
+
+  Future<bool> _ensureLocationServiceEnabled() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (serviceEnabled) {
+      return true;
+    }
+
+    if (!mounted) return false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Turn on location services'),
+          content: const Text(
+            'Using your current location needs your device location to be turned on. Enable Location Services, then come back and we will try again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                _markLocationRetryOnResume();
+                Navigator.of(dialogContext).pop();
+                await Geolocator.openLocationSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
         );
+      },
+    );
+
+    return false;
+  }
+
+  void _markLocationRetryOnResume() {
+    if (_locationMode == LocationInputMode.auto) {
+      _retryAutoLocationOnResume = true;
+      _retryManualLocationOnResume = false;
+      return;
+    }
+
+    _retryManualLocationOnResume = true;
+    _retryAutoLocationOnResume = false;
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    var permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (!mounted) return false;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Location permission required'),
+            content: const Text(
+              'Location permission is permanently denied. Please enable it from app settings to use Auto Select.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Not now'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  _markLocationRetryOnResume();
+                  Navigator.of(dialogContext).pop();
+                  await Geolocator.openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            ],
+          );
+        },
+      );
+      return false;
+    }
+
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
+  Future<void> _captureAutoLocation({bool showErrorSnack = true}) async {
+    if (_isLocatingAuto) return;
+
+    setState(() {
+      _isLocatingAuto = true;
+      _autoLocationError = null;
+    });
+
+    try {
+      final position = await _getUserLocation();
+      if (!mounted) return;
+
+      setState(() {
+        _autoSelectedLocation = LatLng(position.latitude, position.longitude);
+      });
+    } on Exception catch (e) {
+      if (!mounted) return;
+      final message = e.toString();
+
+      setState(() {
+        _autoSelectedLocation = null;
+        _autoLocationError = message;
+      });
+
+      if (showErrorSnack) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not auto-select location: $message'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLocatingAuto = false);
       }
     }
   }
@@ -210,38 +389,45 @@ class _DataEntryState extends State<DataEntry>
         longitude = _selectedManualLocation!.longitude;
         locationSaved = true;
       } else {
-        try {
-          final position = await _getUserLocation();
-          latitude = position.latitude;
-          longitude = position.longitude;
+        if (_autoSelectedLocation != null) {
+          latitude = _autoSelectedLocation!.latitude;
+          longitude = _autoSelectedLocation!.longitude;
           locationSaved = true;
-        } on Exception catch (locationError) {
-          if (!mounted) return;
-          final locationMessage = locationError.toString();
-          final displayMessage = locationMessage.contains('disabled')
-              ? 'Your phone location is turned off. Please enable Location Services, then try again.'
-              : locationMessage.contains('permission')
-              ? 'Location permission is not available. Please allow location access in app settings, then try again.'
-              : 'Could not get location. Please check your GPS and try again.';
+        } else {
+          try {
+            final position = await _getUserLocation();
+            latitude = position.latitude;
+            longitude = position.longitude;
+            _autoSelectedLocation = LatLng(latitude, longitude);
+            locationSaved = true;
+          } on Exception catch (locationError) {
+            if (!mounted) return;
+            final locationMessage = locationError.toString();
+            final displayMessage = locationMessage.contains('disabled')
+                ? 'Your phone location is turned off. Please enable Location Services, then try again.'
+                : locationMessage.contains('permission')
+                ? 'Location permission is not available. Please allow location access in app settings, then try again.'
+                : 'Could not get location. Please check your GPS and try again.';
 
-          await showDialog<void>(
-            context: context,
-            builder: (dialogContext) {
-              return AlertDialog(
-                title: const Text('Location unavailable'),
-                content: Text(displayMessage),
-                actions: [
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('OK'),
-                  ),
-                ],
-              );
-            },
-          );
+            await showDialog<void>(
+              context: context,
+              builder: (dialogContext) {
+                return AlertDialog(
+                  title: const Text('Location unavailable'),
+                  content: Text(displayMessage),
+                  actions: [
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                );
+              },
+            );
 
-          setState(() => _isLoading = false);
-          return;
+            setState(() => _isLoading = false);
+            return;
+          }
         }
       }
 
@@ -605,10 +791,46 @@ class _DataEntryState extends State<DataEntry>
               child: _buildLocationModeButton(
                 text: 'Auto Select',
                 selected: _locationMode == LocationInputMode.auto,
-                onTap: () {
+                onTap: () async {
                   setState(() {
                     _locationMode = LocationInputMode.auto;
                   });
+
+                  // Check location service status first
+                  final serviceEnabled =
+                      await Geolocator.isLocationServiceEnabled();
+                  if (!serviceEnabled && mounted) {
+                    // Show immediate dialog to enable location
+                    await showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) {
+                        return AlertDialog(
+                          title: const Text('Enable Location Services'),
+                          content: const Text(
+                            'Location services are currently disabled. Please enable Location Services to use Auto Select location feature.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
+                                _retryAutoLocationOnResume = true;
+                                await Geolocator.openLocationSettings();
+                              },
+                              child: const Text('Enable Location'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                    return;
+                  }
+
+                  _captureAutoLocation(showErrorSnack: false);
                 },
               ),
             ),
@@ -717,11 +939,60 @@ class _DataEntryState extends State<DataEntry>
           ),
         ] else ...[
           const SizedBox(height: 8),
+          if (_isLocatingAuto)
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Detecting current location...',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            )
+          else if (_autoSelectedLocation != null)
+            Text(
+              'Auto-selected: ${_autoSelectedLocation!.latitude.toStringAsFixed(6)}, ${_autoSelectedLocation!.longitude.toStringAsFixed(6)}',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 12,
+              ),
+            )
+          else if (_autoLocationError != null)
+            Text(
+              'Auto-select failed. Please retry or choose Select Own.',
+              style: TextStyle(color: Colors.orange.shade100, fontSize: 12),
+            ),
+          const SizedBox(height: 6),
           Text(
             'We will use your current device location automatically.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.7),
               fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _isLocatingAuto
+                  ? null
+                  : () => _captureAutoLocation(showErrorSnack: true),
+              icon: const Icon(Icons.gps_fixed, color: Colors.white),
+              label: const Text(
+                'Retry Auto Select',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ),
         ],

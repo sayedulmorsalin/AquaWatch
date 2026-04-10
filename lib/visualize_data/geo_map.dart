@@ -35,7 +35,6 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     _verifiedReadingsSub = FirebaseFirestore.instance
         .collection('water_quality_readings')
         .where('verificationStatus', isEqualTo: 'approved')
-        .orderBy('verifiedAt', descending: true)
         .snapshots()
         .listen((snapshot) {
           if (!mounted) return;
@@ -76,6 +75,42 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
     });
   }
 
+  double? _parseDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  Map<String, dynamic> _stationDataFromReading(
+    Map<String, dynamic> data, {
+    required String name,
+    required String area,
+    required String status,
+    required double lat,
+    required double lng,
+    required int sortKey,
+  }) {
+    return {
+      'name': name,
+      'area': area,
+      'ph': _parseDouble(data['ph']) ?? 0.0,
+      'tds': _parseDouble(data['tds']) ?? 0.0,
+      'ec': _parseDouble(data['ec']) ?? 0.0,
+      'salinity': _parseDouble(data['salinity']) ?? 0.0,
+      'temperature': _parseDouble(data['temperature']) ?? 0.0,
+      'status': status,
+      'lat': lat,
+      'lng': lng,
+      'sortKey': sortKey,
+    };
+  }
+
+  int _timestampSortKey(dynamic value) {
+    if (value is Timestamp) return value.millisecondsSinceEpoch;
+    if (value is DateTime) return value.millisecondsSinceEpoch;
+    return 0;
+  }
+
   void _syncVerifiedReadings(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) async {
@@ -84,8 +119,8 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
 
     for (final doc in docs) {
       final data = doc.data();
-      final lat = (data['latitude'] as num?)?.toDouble();
-      final lng = (data['longitude'] as num?)?.toDouble();
+      final lat = _parseDouble(data['latitude']);
+      final lng = _parseDouble(data['longitude']);
       if (lat == null || lng == null) {
         continue;
       }
@@ -109,20 +144,26 @@ class _GeoMapState extends State<GeoMap> with TickerProviderStateMixin {
       }
 
       final status = _normalizeStatus(data['overallQuality']);
+      final sortKey = _timestampSortKey(data['verifiedAt']) != 0
+          ? _timestampSortKey(data['verifiedAt'])
+          : _timestampSortKey(data['submittedAt']);
 
-      _waterStations.add({
-        'name': userName,
-        'area': submittedBy,
-        'ph': (data['ph'] as num?)?.toDouble() ?? 0.0,
-        'tds': (data['tds'] as num?)?.toDouble() ?? 0.0,
-        'ec': (data['ec'] as num?)?.toDouble() ?? 0.0,
-        'salinity': (data['salinity'] as num?)?.toDouble() ?? 0.0,
-        'temperature': (data['temperature'] as num?)?.toDouble() ?? 0.0,
-        'status': status,
-        'lat': lat,
-        'lng': lng,
-      });
+      _waterStations.add(
+        _stationDataFromReading(
+          data,
+          name: userName,
+          area: submittedBy,
+          status: status,
+          lat: lat,
+          lng: lng,
+          sortKey: sortKey,
+        ),
+      );
     }
+
+    _waterStations.sort(
+      (a, b) => (b['sortKey'] as int).compareTo(a['sortKey'] as int),
+    );
 
     if (mounted) {
       _applyFilters();
