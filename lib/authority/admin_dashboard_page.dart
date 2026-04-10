@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:async/async.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:aquawatch/visualize_data/geo_map.dart';
 
 import 'bangladesh_area_data.dart';
@@ -554,6 +557,23 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
+                    if (result.resolvedPlaceName.isNotEmpty) ...[
+                      Text(
+                        'Resolved place: ${result.resolvedPlaceName}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (result.searchHint.isNotEmpty) ...[
+                      Text(
+                        result.searchHint,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     _buildResultLine('Pending', result.pending),
                     _buildResultLine('Approved', result.approved),
                     _buildResultLine('Rejected', result.rejected),
@@ -711,18 +731,30 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     final firestore = FirebaseFirestore.instance;
     final normalizedDistrict = _normalizeText(district);
     final normalizedThana = _normalizeText(thana);
+    final geoTarget = await _resolveAreaLocation(
+      district: district,
+      thana: thana,
+    );
 
     // Query only the main water_quality_readings collection with all statuses
     final snapshot = await firestore.collection('water_quality_readings').get();
 
     final reports = <_AreaWaterReport>[];
+    final geocodedReports = <_AreaWaterReport>[];
     var pending = 0;
     var approved = 0;
     var rejected = 0;
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
-      if (!_matchesArea(data, normalizedDistrict, normalizedThana)) {
+      final matchesByText = _matchesArea(
+        data,
+        normalizedDistrict,
+        normalizedThana,
+      );
+      final matchesByGeo = _matchesGeo(data, geoTarget);
+
+      if (!matchesByText && !matchesByGeo) {
         continue;
       }
 
@@ -734,10 +766,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       if (status == 'approved') approved++;
       if (status == 'rejected') rejected++;
 
-      reports.add(await _toAreaWaterReport(data, status: status));
+      final report = await _toAreaWaterReport(data, status: status);
+      if (matchesByGeo) {
+        geocodedReports.add(report);
+      } else {
+        reports.add(report);
+      }
     }
 
-    reports.sort((a, b) {
+    final mergedReports = geocodedReports.isNotEmpty
+        ? <_AreaWaterReport>[...geocodedReports, ...reports]
+        : reports;
+
+    mergedReports.sort((a, b) {
       final aTime = a.submittedAt?.millisecondsSinceEpoch ?? 0;
       final bTime = b.submittedAt?.millisecondsSinceEpoch ?? 0;
       return bTime.compareTo(aTime);
@@ -747,9 +788,97 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       pending: pending,
       approved: approved,
       rejected: rejected,
-      reports: reports,
+      reports: mergedReports,
+      resolvedPlaceName: geoTarget?.placeName ?? '',
+      searchHint: geoTarget == null
+          ? 'Could not geocode this district/upazila, showing text-based matches.'
+          : geocodedReports.isNotEmpty
+          ? 'Showing nearest reports using geocoded location.'
+          : 'No nearby coordinate matches found, showing text-based matches.',
     );
   }
+
+  Future<_GeoTarget?> _resolveAreaLocation({
+    required String district,
+    required String thana,
+  }) async {
+    final queries = <String>[
+      '$thana, $district, Bangladesh',
+      '$district, Bangladesh',
+    ];
+
+    for (final query in queries) {
+      try {
+        final locations = await locationFromAddress(query);
+        if (locations.isEmpty) {
+          continue;
+        }
+
+        final location = locations.first;
+        String placeName = query;
+
+        try {
+          final placemarks = await placemarkFromCoordinates(
+            location.latitude,
+            location.longitude,
+          );
+          if (placemarks.isNotEmpty) {
+            final mark = placemarks.first;
+            final parts = [
+              mark.subAdministrativeArea,
+              mark.administrativeArea,
+              mark.country,
+            ].whereType<String>().where((p) => p.trim().isNotEmpty).toList();
+            if (parts.isNotEmpty) {
+              placeName = parts.join(', ');
+            }
+          }
+        } catch (_) {
+          // Reverse geocoding may fail on some devices; keep query as fallback.
+        }
+
+        return _GeoTarget(
+          latitude: location.latitude,
+          longitude: location.longitude,
+          placeName: placeName,
+        );
+      } catch (_) {
+        // Try the next query.
+      }
+    }
+
+    return null;
+  }
+
+  bool _matchesGeo(Map<String, dynamic> data, _GeoTarget? target) {
+    if (target == null) {
+      return false;
+    }
+
+    final lat = _parseDouble(data['latitude']);
+    final lng = _parseDouble(data['longitude']);
+    if (lat == null || lng == null) {
+      return false;
+    }
+
+    final distanceKm = _distanceKm(lat, lng, target.latitude, target.longitude);
+    return distanceKm <= 15;
+  }
+
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadiusKm = 6371.0;
+    final dLat = _toRadians(lat2 - lat1);
+    final dLon = _toRadians(lon2 - lon1);
+    final a =
+        math.pow(math.sin(dLat / 2), 2).toDouble() +
+        math.cos(_toRadians(lat1)) *
+            math.cos(_toRadians(lat2)) *
+            math.pow(math.sin(dLon / 2), 2).toDouble();
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  double _toRadians(double degrees) => degrees * (math.pi / 180.0);
 
   Future<_AreaWaterReport> _toAreaWaterReport(
     Map<String, dynamic> data, {
@@ -887,18 +1016,24 @@ class _AreaResultData {
     required this.approved,
     required this.rejected,
     required this.reports,
+    required this.resolvedPlaceName,
+    required this.searchHint,
   });
 
   const _AreaResultData.empty()
     : pending = 0,
       approved = 0,
       rejected = 0,
-      reports = const [];
+      reports = const [],
+      resolvedPlaceName = '',
+      searchHint = '';
 
   final int pending;
   final int approved;
   final int rejected;
   final List<_AreaWaterReport> reports;
+  final String resolvedPlaceName;
+  final String searchHint;
 
   int get total => pending + approved + rejected;
 }
@@ -927,4 +1062,16 @@ class _AreaWaterReport {
   final double salinity;
   final double temperature;
   final DateTime? submittedAt;
+}
+
+class _GeoTarget {
+  const _GeoTarget({
+    required this.latitude,
+    required this.longitude,
+    required this.placeName,
+  });
+
+  final double latitude;
+  final double longitude;
+  final String placeName;
 }
