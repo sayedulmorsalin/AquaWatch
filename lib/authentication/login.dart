@@ -239,11 +239,8 @@ class _LoginPageState extends State<LoginPage>
                                               Checkbox(
                                                 value: _rememberMe,
                                                 onChanged: (value) {
-                                                  setState(
-                                                    () => _rememberMe =
-                                                        value ?? false,
-                                                  );
-                                                },
+                                          setState(() => _rememberMe = value ?? false);
+                                                         },
                                                 fillColor:
                                                     MaterialStateProperty.all<
                                                       Color
