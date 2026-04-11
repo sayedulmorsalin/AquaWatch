@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage>
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Something went wrong. Please try again.'),
+          content: Text('Something went wrong. Try again.')
           backgroundColor: Colors.red,
         ),
       );
