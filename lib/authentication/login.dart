@@ -66,10 +66,10 @@ class _LoginPageState extends State<LoginPage>
 
     setState(() => _isLoading = true);
     try {
-      await _authService.signIn(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
+         await _authService.signIn(
+        email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+       );
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
