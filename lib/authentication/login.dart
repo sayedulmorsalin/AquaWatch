@@ -379,7 +379,8 @@ class _LoginPageState extends State<LoginPage>
     TextInputType keyboardType = TextInputType.text,
   }) {
     return TextField(
-      controller: controller,
+  controller: controller,
+  autofillHints: const [AutofillHints.email],
       keyboardType: keyboardType,
       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
       decoration: _commonDecoration(hint: label, icon: icon),
