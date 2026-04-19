@@ -29,7 +29,8 @@ function calculateDistance(
 // Cloud Function triggered on new water quality reading submission
 export const notifyNearbyAuthorities = functions.firestore
   .document('water_quality_readings/{readingId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap: functions.firestore.QueryDocumentSnapshot, context: functions.EventContext) => {
+    const readingId = context.params.readingId;
     const readingData = snap.data();
     const submissionLat = readingData.latitude;
     const submissionLon = readingData.longitude;
@@ -100,13 +101,13 @@ export const notifyNearbyAuthorities = functions.firestore
       }
 
       // Send notifications to nearby authorities
-      const message = {
+      const messagePayload = {
         notification: {
           title: 'New Water Quality Reading',
           body: `${userName} submitted a reading in your area`,
         },
         data: {
-          readingId: context.params.readingId,
+          readingId: readingId,
           latitude: submissionLat.toString(),
           longitude: submissionLon.toString(),
           userName: userName,
@@ -119,10 +120,10 @@ export const notifyNearbyAuthorities = functions.firestore
       for (let i = 0; i < nearbyAuthorities.length; i += 500) {
         const batch = nearbyAuthorities.slice(i, i + 500);
         batches.push(
-          messaging.sendMulticast({
+          messaging.sendEachForMulticast({
             tokens: batch,
-            notification: message.notification,
-            data: message.data,
+            notification: messagePayload.notification,
+            data: messagePayload.data,
           })
         );
       }
@@ -143,7 +144,7 @@ export const notifyNearbyAuthorities = functions.firestore
 
       // Save notification log
       await db.collection('notification_logs').add({
-        readingId: context.params.readingId,
+        readingId: readingId,
         submittedBy: userId,
         submitterName: userName,
         submissionLocation: {
@@ -158,7 +159,7 @@ export const notifyNearbyAuthorities = functions.firestore
       });
 
       console.log(
-        `Notification log saved for reading ${context.params.readingId}`
+        `Notification log saved for reading ${readingId}`
       );
     } catch (error) {
       console.error('Error in notifyNearbyAuthorities:', error);
@@ -167,7 +168,7 @@ export const notifyNearbyAuthorities = functions.firestore
   });
 
 // Optional: Cloud Function to test sending notifications
-export const testNotification = functions.https.onCall(async (data, context) => {
+export const testNotification = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       'unauthenticated',
@@ -206,7 +207,7 @@ export const testNotification = functions.https.onCall(async (data, context) => 
 });
 
 // Optional: Cloud Function to refresh FCM token
-export const updateFCMToken = functions.https.onCall(async (data, context) => {
+export const updateFCMToken = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       'unauthenticated',

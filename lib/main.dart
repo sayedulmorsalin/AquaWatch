@@ -9,8 +9,8 @@ import 'package:flutter/material.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('Handling a background message: ${message.messageId}');
-  print('Message data: ${message.data}');
+  // Message received in background
+  // Handle it as needed (logging, analytics, etc.)
 }
 
 Future<void> main() async {

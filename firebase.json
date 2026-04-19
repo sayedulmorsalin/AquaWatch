@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "aquawatch-afbd9"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-functions-debug.log"
+      ]
+    }
+  ]
+}
