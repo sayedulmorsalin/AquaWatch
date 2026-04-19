@@ -44,6 +44,7 @@ class AuthService {
     required String email,
     required String password,
     required String userRole,
+    Map<String, dynamic>? location,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -54,14 +55,22 @@ class AuthService {
       final user = credential.user;
       if (user != null) {
         await user.updateDisplayName(name.trim());
-        await _firestore.collection('users').doc(user.uid).set({
+
+        final userData = {
           'name': name.trim(),
           'phone': phone.trim(),
           'address': address.trim(),
           'email': email.trim(),
           'role': userRole,
           'createdAt': FieldValue.serverTimestamp(),
-        });
+        };
+
+        // Add location data if provided
+        if (location != null) {
+          userData['location'] = location;
+        }
+
+        await _firestore.collection('users').doc(user.uid).set(userData);
       }
 
       return credential;

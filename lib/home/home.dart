@@ -4,6 +4,7 @@ import 'package:aquawatch/profile/profile_page.dart';
 import 'package:aquawatch/authority/admin_dashboard_page.dart';
 import 'package:aquawatch/visualize_data/geo_map.dart';
 import 'package:aquawatch/services/auth_service.dart';
+import 'package:aquawatch/services/notification_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _HomePageState extends State<HomePage>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   final _authService = AuthService();
+  final _notificationService = NotificationService();
   String _userRole = '';
 
   @override
@@ -33,6 +35,15 @@ class _HomePageState extends State<HomePage>
 
     _animationController.forward();
     _loadUserRole();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    try {
+      await _notificationService.initializeNotifications();
+    } catch (e) {
+      print('Error initializing notifications: $e');
+    }
   }
 
   Future<void> _loadUserRole() async {

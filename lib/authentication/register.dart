@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
+import 'package:aquawatch/authentication/location_selection_dialog.dart';
 import 'package:aquawatch/services/auth_service.dart';
+import 'package:aquawatch/services/location_service.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -28,6 +30,7 @@ class _RegisterState extends State<Register>
   bool _isLoading = false;
   String _selectedUserType = 'User';
   final _authService = AuthService();
+  LocationData? _selectedLocation;
 
   @override
   void initState() {
@@ -78,6 +81,16 @@ class _RegisterState extends State<Register>
       return;
     }
 
+    if (_selectedLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your location'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -121,6 +134,7 @@ class _RegisterState extends State<Register>
         email: _emailController.text,
         password: _passwordController.text,
         userRole: _selectedUserType,
+        location: _selectedLocation?.toMap(),
       );
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -296,6 +310,8 @@ class _RegisterState extends State<Register>
                                   label: 'Address',
                                   icon: Icons.location_on_outlined,
                                 ),
+                                const SizedBox(height: 16),
+                                _buildLocationSelectionButton(),
                                 const SizedBox(height: 16),
                                 _buildPasswordTextField(
                                   controller: _passwordController,
@@ -518,6 +534,93 @@ class _RegisterState extends State<Register>
                     ),
                   ),
                 ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationSelectionButton() {
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => LocationSelectionDialog(
+            onLocationSelected: (location) {
+              setState(() {
+                _selectedLocation = location;
+              });
+            },
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _selectedLocation != null
+                ? Colors.green.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.35),
+            width: _selectedLocation != null ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _selectedLocation != null
+                  ? Icons.check_circle
+                  : Icons.location_on_outlined,
+              color: _selectedLocation != null
+                  ? Colors.green
+                  : Colors.white.withValues(alpha: 0.85),
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _selectedLocation != null
+                        ? 'Location Selected'
+                        : 'Select Your Location',
+                    style: TextStyle(
+                      color: _selectedLocation != null
+                          ? Colors.green.shade300
+                          : Colors.white.withValues(alpha: 0.85),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (_selectedLocation != null)
+                    Text(
+                      _selectedLocation!.toString(),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Text(
+                      'Auto-detect or manually select',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white.withValues(alpha: 0.65),
+              size: 16,
+            ),
+          ],
         ),
       ),
     );
