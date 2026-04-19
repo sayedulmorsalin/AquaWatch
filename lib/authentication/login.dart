@@ -390,6 +390,7 @@ class _LoginPageState extends State<LoginPage>
   Widget _buildPasswordTextField() {
     return TextField(
       controller: _passwordController,
+      autofillHints: const [AutofillHints.password],
       obscureText: _obscurePassword,
       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
       decoration: _commonDecoration(
