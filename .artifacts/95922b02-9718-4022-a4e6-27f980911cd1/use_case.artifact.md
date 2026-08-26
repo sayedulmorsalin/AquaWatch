@@ -11,30 +11,30 @@ This document describes the primary interactions between stakeholders (Actors) a
 ## 2. Use Case Diagram
 
 ```mermaid
-useCaseDiagram
-    actor Citizen
-    actor Authority
-    actor Researcher
-    actor "System (AI)" as AI
+graph LR
+    subgraph Users
+        Citizen[Citizen]
+        Authority[Authority]
+        Researcher[Researcher]
+    end
 
-    package AquaWatch {
-        usecase "Report Water Quality" as UC1
-        usecase "View Water Quality Map" as UC2
-        usecase "Manage User Profile" as UC3
-        usecase "Analyze Image (AI)" as UC4
-        usecase "Verify Submission" as UC5
-        usecase "Manage Hotspots" as UC6
-        usecase "Export Data Analytics" as UC7
-        usecase "Receive Emergency Alerts" as UC8
-    }
+    subgraph "AquaWatch System"
+        UC1(Report Water Quality)
+        UC2(View Water Quality Map)
+        UC3(Manage User Profile)
+        UC4(Analyze Image AI)
+        UC5(Verify Submission)
+        UC6(Manage Hotspots)
+        UC7(Export Data Analytics)
+        UC8(Receive Emergency Alerts)
+    end
 
     Citizen --> UC1
     Citizen --> UC2
     Citizen --> UC3
     Citizen --> UC8
 
-    AI --> UC4
-    UC4 ..> UC1 : <<include>>
+    UC1 -.-> UC4
 
     Authority --> UC5
     Authority --> UC6

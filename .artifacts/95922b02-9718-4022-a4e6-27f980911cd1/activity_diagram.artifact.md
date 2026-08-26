@@ -7,51 +7,33 @@ This diagram illustrates the operational flow of the AquaWatch system, specifica
 The activity diagram below shows the interaction between the Citizen (User), the Automated AI System, and the Authority (Admin).
 
 ```mermaid
-activityDiagram
-    state "Start Application" as Start
-    state "User Logs In" as Login
-    state "Select 'Report Water Quality'" as SelectReport
-    state "Capture Photo & Location" as Capture
-    state "Is Device Online?" as CheckOnline <<choice>>
-    state "Save to Local DB (Queue)" as LocalSave
-    state "Upload to Cloud Storage" as CloudUpload
-    state "AI: Analyze Image & Estimate Parameters" as AIProcess
-    state "Review & Submit Metadata" as UserSubmit
-    state "Status: Pending Verification" as Pending
-    state "Authority Reviews Report" as AuthorityReview
-    state "Valid Data?" as CheckValid <<choice>>
-    state "Approve & Mark Verified" as Approve
-    state "Reject & Provide Feedback" as Reject
-    state "Notify Citizen" as Notify
-    state "Update Public Hotspot Map" as UpdateMap
-    state "End" as End
+flowchart TD
+    Start([Start]) --> Login[User Logs In]
+    Login --> SelectReport[Select 'Report Water Quality']
+    SelectReport --> Capture[Capture Photo & Location]
+    Capture --> CheckOnline{Is Device Online?}
 
-    [*] --> Start
-    Start --> Login
-    Login --> SelectReport
-    SelectReport --> Capture
-    Capture --> CheckOnline
+    CheckOnline -- No --> LocalSave[Save to Local DB/Queue]
+    LocalSave --> WaitConn[Wait for Connection]
+    WaitConn --> CheckOnline
 
-    CheckOnline --> LocalSave : No
-    LocalSave --> CheckOnline : Wait for connection
-    CheckOnline --> CloudUpload : Yes
+    CheckOnline -- Yes --> CloudUpload[Upload to Cloud Storage]
 
-    CloudUpload --> AIProcess
-    AIProcess --> UserSubmit
-    UserSubmit --> Pending
+    CloudUpload --> AIProcess[AI: Analyze Image & Parameters]
+    AIProcess --> UserSubmit[Review & Submit Metadata]
+    UserSubmit --> Pending[Status: Pending Verification]
 
-    Pending --> AuthorityReview
-    AuthorityReview --> CheckValid
+    Pending --> AuthorityReview[Authority Reviews Report]
+    AuthorityReview --> CheckValid{Valid Data?}
 
-    CheckValid --> Approve : Yes
-    CheckValid --> Reject : No
+    CheckValid -- Yes --> Approve[Approve & Mark Verified]
+    CheckValid -- No --> Reject[Reject & Provide Feedback]
 
-    Approve --> UpdateMap
+    Approve --> UpdateMap[Update Public Hotspot Map]
+    UpdateMap --> Notify[Notify Citizen]
     Reject --> Notify
-    UpdateMap --> Notify
 
-    Notify --> End
-    End --> [*]
+    Notify --> End([End])
 ```
 
 ## Key Activity Nodes Explained:
