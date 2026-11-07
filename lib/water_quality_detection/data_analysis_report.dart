@@ -1,7 +1,8 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:aquawatch/services/water_reading_service.dart';
+import 'package:aquawatch/services/ml_prediction_service.dart';
 
 class WaterQualityData {
   final double ph;
@@ -137,6 +138,8 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
   final WaterReadingService _waterReadingService = WaterReadingService();
   bool _isSavingReport = false;
   bool _reportSaved = false;
+  MlPredictionResult? _mlPrediction;
+  bool _isLoadingMl = true;
 
   @override
   void initState() {
@@ -165,7 +168,30 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
       if (mounted) _listController.forward();
     });
 
+    _fetchMlPrediction();
     _saveReportWithAnalysis();
+  }
+
+  Future<void> _fetchMlPrediction() async {
+    try {
+      final res = await MlPredictionService.predictPotability(
+        ph: widget.data.ph,
+        tds: widget.data.tds,
+        ec: widget.data.ec,
+        salinity: widget.data.salinity,
+        temperature: widget.data.temperature,
+      );
+      if (mounted) {
+        setState(() {
+          _mlPrediction = res;
+          _isLoadingMl = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingMl = false);
+      }
+    }
   }
 
   Future<void> _saveReportWithAnalysis() async {
@@ -611,7 +637,9 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
                       child: Column(
                         children: [
                           _buildScoreGauge(overallColor),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
+                          _buildMlPotabilityCard(),
+                          const SizedBox(height: 20),
                           _buildSummaryCard(overallColor),
                           const SizedBox(height: 24),
                           _buildSectionHeader('Parameter Breakdown'),
@@ -743,6 +771,154 @@ class _DataAnalysisReportState extends State<DataAnalysisReport>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMlPotabilityCard() {
+    if (_isLoadingMl) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.cyanAccent),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Running AI Potability Assessment...',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_mlPrediction == null) {
+      return const SizedBox.shrink();
+    }
+
+    final isPotable = _mlPrediction!.isPotable;
+    final badgeColor =
+        isPotable ? const Color(0xFF00E676) : const Color(0xFFFF1744);
+    final badgeIcon =
+        isPotable ? Icons.verified_rounded : Icons.dangerous_rounded;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: badgeColor.withValues(alpha: 0.35), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(badgeIcon, color: badgeColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AQUA WATCH AI PREDICTION',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withValues(alpha: 0.5),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _mlPrediction!.predictionLabel,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: badgeColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  '${(_mlPrediction!.potabilityProbability * 100).toStringAsFixed(1)}% Potable',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Risk Level: ${_mlPrediction!.riskLevel} • Inputs: ${_mlPrediction!.dataCompleteness}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+          if (_mlPrediction!.featureWarnings.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...(_mlPrediction!.featureWarnings.map(
+              (warning) => Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('⚠️ ', style: TextStyle(fontSize: 12)),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        style: const TextStyle(
+                          color: Color(0xFFFFA726),
+                          fontSize: 11,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )),
+          ],
+        ],
+      ),
     );
   }
 
