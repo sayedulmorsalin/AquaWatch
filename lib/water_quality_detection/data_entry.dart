@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'data_analysis_report.dart';
+import 'fish_water_data_entry.dart';
 
 enum LocationInputMode { auto, manual }
 
@@ -142,10 +143,8 @@ class _DataEntryState extends State<DataEntry>
       final lastKnownPosition = await Geolocator.getLastKnownPosition();
       if (lastKnownPosition == null) return null;
 
-      final timestamp = lastKnownPosition.timestamp;
-      if (timestamp == null) return lastKnownPosition;
-
-      if (DateTime.now().difference(timestamp) <= const Duration(minutes: 10)) {
+      if (DateTime.now().difference(lastKnownPosition.timestamp) <=
+          const Duration(minutes: 10)) {
         return lastKnownPosition;
       }
     } on Exception {
@@ -587,6 +586,94 @@ class _DataEntryState extends State<DataEntry>
                             position: _slideAnimation,
                             child: Column(
                               children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.shade900
+                                        .withValues(alpha: 0.4),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: const Color(0xFF00E676)
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00E676)
+                                              .withValues(alpha: 0.2),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.phishing_rounded,
+                                          color: Color(0xFF00E676),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Commercial Fish & Aquaculture?',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Monitor DO, ammonia, aeration & species health',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.75),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFF00E676),
+                                          foregroundColor:
+                                              const Color(0xFF00292B),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const FishWaterDataEntryPage(),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text(
+                                          'Switch',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
                                 _buildDataField(
                                   controller: _phController,
                                   label: 'pH Level',

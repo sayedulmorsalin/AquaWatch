@@ -1,11 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:aquawatch/home/home.dart';
 import 'package:aquawatch/authentication/register.dart';
 import 'package:aquawatch/authentication/forgot_pass.dart';
 import 'package:aquawatch/services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -243,7 +243,7 @@ class _LoginPageState extends State<LoginPage>
                                                   );
                                                 },
                                                 fillColor:
-                                                    MaterialStateProperty.all<
+                                                    WidgetStateProperty.all<
                                                       Color
                                                     >(Colors.white),
                                                 checkColor:

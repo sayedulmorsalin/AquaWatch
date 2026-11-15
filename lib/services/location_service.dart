@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
@@ -71,7 +72,7 @@ class LocationService {
         country: placemark?.country,
       );
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
       return null;
     }
   }
@@ -99,7 +100,7 @@ class LocationService {
         country: placemark?.country,
       );
     } catch (e) {
-      print('Error geocoding address: $e');
+      debugPrint('Error geocoding address: $e');
       return null;
     }
   }

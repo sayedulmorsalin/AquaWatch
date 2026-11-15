@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -52,22 +53,24 @@ class NotificationService {
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error saving FCM token: $e');
+      debugPrint('Error saving FCM token: $e');
     }
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    print('Got a message whilst in the foreground!');
-    print('Message data: ${message.data}');
+    debugPrint('Got a message whilst in the foreground!');
+    debugPrint('Message data: ${message.data}');
 
     if (message.notification != null) {
-      print('Message also contained a notification: ${message.notification}');
+      debugPrint(
+        'Message also contained a notification: ${message.notification}',
+      );
     }
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    print('Message clicked!');
-    print('Message data: ${message.data}');
+    debugPrint('Message clicked!');
+    debugPrint('Message data: ${message.data}');
     // Handle notification tap - navigate to relevant screen
   }
 

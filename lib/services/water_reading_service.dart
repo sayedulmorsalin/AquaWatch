@@ -158,4 +158,101 @@ class WaterReadingService {
 
     await readingRef.set(payload);
   }
+
+  Future<void> saveCommercialFishReading({
+    required String species,
+    required String farmingSystem,
+    required String pondName,
+    required double dissolvedOxygen,
+    required double ph,
+    required double temperature,
+    required double ammonia,
+    double? unionizedAmmonia,
+    double? nitrite,
+    required double tds,
+    required double ec,
+    required double salinity,
+    double? transparency,
+    required double latitude,
+    required double longitude,
+    List<String>? imagePaths,
+    String? overallQuality,
+    int? overallScore,
+    String? overallSummary,
+    String? aerationAdvisory,
+    String? feedingAdvisory,
+    String? pondTreatmentAdvisory,
+    List<Map<String, dynamic>>? parameterResults,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'Please sign in before submitting data.',
+      );
+    }
+
+    final readingRef = _firestore.collection('water_quality_readings').doc();
+
+    final List<String> uploadedImageUrls = [];
+    if (imagePaths != null && imagePaths.isNotEmpty) {
+      for (final p in imagePaths) {
+        if (p.trim().isNotEmpty) {
+          try {
+            final url = await _uploadToFreeImageHost(p);
+            uploadedImageUrls.add(url);
+          } catch (_) {
+            // Keep going if one image upload encounters network issues
+          }
+        }
+      }
+    }
+
+    final payload = <String, dynamic>{
+      'readingType': 'commercial_fish',
+      'species': species,
+      'farmingSystem': farmingSystem,
+      'pondName': pondName,
+      'dissolvedOxygen': dissolvedOxygen,
+      'ph': ph,
+      'temperature': temperature,
+      'ammonia': ammonia,
+      'unionizedAmmonia': unionizedAmmonia,
+      'tds': tds,
+      'ec': ec,
+      'salinity': salinity,
+      'latitude': latitude,
+      'longitude': longitude,
+      'userId': user.uid,
+      'imageUrls': uploadedImageUrls,
+      // Retain compatibility keys so existing map & list components display without issue
+      'phImageUrls': uploadedImageUrls,
+      'tdsImageUrls': uploadedImageUrls,
+      'ecImageUrls': uploadedImageUrls,
+      'salinityImageUrls': uploadedImageUrls,
+      'verificationStatus': 'pending',
+      'submittedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (nitrite != null) payload['nitrite'] = nitrite;
+    if (transparency != null) payload['transparency'] = transparency;
+
+    if (overallQuality != null) payload['overallQuality'] = overallQuality;
+    if (overallScore != null) payload['overallScore'] = overallScore;
+    if (overallSummary != null) payload['overallSummary'] = overallSummary;
+    if (aerationAdvisory != null) {
+      payload['aerationAdvisory'] = aerationAdvisory;
+    }
+    if (feedingAdvisory != null) {
+      payload['feedingAdvisory'] = feedingAdvisory;
+    }
+    if (pondTreatmentAdvisory != null) {
+      payload['pondTreatmentAdvisory'] = pondTreatmentAdvisory;
+    }
+    if (parameterResults != null) {
+      payload['parameterResults'] = parameterResults;
+    }
+
+    await readingRef.set(payload);
+  }
 }
