@@ -236,6 +236,14 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                         spacing: 10,
                         runSpacing: 10,
                         children: [
+                          if (data['readingType'] == 'commercial_fish') ...[
+                            _infoChip(
+                              'DO ${_formatValue(data['dissolvedOxygen'])} mg/L',
+                            ),
+                            _infoChip(
+                              'TAN ${_formatValue(data['ammonia'])} mg/L',
+                            ),
+                          ],
                           _infoChip('pH ${_formatValue(data['ph'])}'),
                           _infoChip('TDS ${_formatValue(data['tds'])}'),
                           _infoChip('EC ${_formatValue(data['ec'])}'),
@@ -247,6 +255,43 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                           ),
                         ],
                       ),
+                      if (data['readingType'] == 'commercial_fish' &&
+                          data['species'] != null) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.cyan.shade900.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.cyanAccent.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Aquaculture: ${data['species']} (${data['pondName'] ?? 'Pond'})',
+                                style: const TextStyle(
+                                  color: Colors.cyanAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (data['aerationAdvisory'] != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Aeration: ${data['aerationAdvisory']}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       Text(
                         'Overall: ${data['overallQuality'] ?? '-'} (${data['overallScore'] ?? '-'}/100)',
@@ -280,9 +325,9 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: images.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (context, index) =>
                                 const SizedBox(width: 8),
-                            itemBuilder: (_, index) {
+                            itemBuilder: (context, index) {
                               return ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: Image.network(
@@ -290,7 +335,7 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                   width: 120,
                                   height: 120,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  errorBuilder: (context, error, stackTrace) => Container(
                                     width: 120,
                                     height: 120,
                                     color: Colors.white.withValues(alpha: 0.08),
@@ -471,7 +516,7 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                     return ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                       itemCount: docs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final doc = docs[index];
                         final data = doc.data();
@@ -573,6 +618,15 @@ class _VerifyUserReadingsPageState extends State<VerifyUserReadingsPage> {
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
+                                    if (data['readingType'] ==
+                                        'commercial_fish') ...[
+                                      _infoChip(
+                                        'DO ${_formatValue(data['dissolvedOxygen'])} mg/L',
+                                      ),
+                                      _infoChip(
+                                        'TAN ${_formatValue(data['ammonia'])} mg/L',
+                                      ),
+                                    ],
                                     _infoChip('pH ${_formatValue(data['ph'])}'),
                                     _infoChip(
                                       'TDS ${_formatValue(data['tds'])}',

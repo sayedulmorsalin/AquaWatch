@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:aquawatch/authentication/login.dart';
 import 'package:aquawatch/authentication/location_selection_dialog.dart';
 import 'package:aquawatch/services/auth_service.dart';
@@ -462,7 +462,7 @@ class _RegisterState extends State<Register>
         border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
       ),
       child: DropdownButtonFormField<String>(
-        value: _selectedUserType,
+        initialValue: _selectedUserType,
         dropdownColor: Colors.blue.shade900,
         icon: Icon(
           Icons.arrow_drop_down,

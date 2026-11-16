@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:aquawatch/water_quality_detection/data_entry.dart';
+import 'package:aquawatch/water_quality_detection/fish_water_data_entry.dart';
 import 'package:aquawatch/profile/profile_page.dart';
 import 'package:aquawatch/authority/admin_dashboard_page.dart';
 import 'package:aquawatch/visualize_data/geo_map.dart';
@@ -7,7 +8,7 @@ import 'package:aquawatch/services/auth_service.dart';
 import 'package:aquawatch/services/notification_service.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -42,7 +43,7 @@ class _HomePageState extends State<HomePage>
     try {
       await _notificationService.initializeNotifications();
     } catch (e) {
-      print('Error initializing notifications: $e');
+      debugPrint('Error initializing notifications: $e');
     }
   }
 
@@ -213,6 +214,23 @@ class _HomePageState extends State<HomePage>
                             ),
                             const SizedBox(height: 16),
                             _buildNavigationCard(
+                              title: 'Commercial Fish Water AI',
+                              description:
+                                  'AI aquaculture monitoring: DO, pH, ammonia, aeration & health',
+                              icon: Icons.phishing_rounded,
+                              badgeText: 'AI DRIVEN',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const FishWaterDataEntryPage(),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildNavigationCard(
                               title: 'Water Map',
                               description: 'View monitoring stations on map',
                               icon: Icons.map,
@@ -264,6 +282,7 @@ class _HomePageState extends State<HomePage>
     required String description,
     required IconData icon,
     required VoidCallback onTap,
+    String? badgeText,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -297,13 +316,45 @@ class _HomePageState extends State<HomePage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          if (badgeText != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00E676).withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF00E676),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                badgeText,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF00E676),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
