@@ -9,6 +9,8 @@ import 'package:latlong2/latlong.dart';
 
 import 'data_analysis_report.dart';
 import 'fish_water_data_entry.dart';
+import 'fish_water_analysis_report.dart';
+import 'package:aquawatch/services/fish_water_ai_service.dart';
 
 enum LocationInputMode { auto, manual }
 
@@ -466,6 +468,80 @@ class _DataEntryState extends State<DataEntry>
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _handleFishWaterSubmit() {
+    final ph = double.tryParse(_phController.text.trim().replaceAll(',', '.'));
+    final tds =
+        double.tryParse(_tdsController.text.trim().replaceAll(',', '.'));
+    final ec = double.tryParse(_ecController.text.trim().replaceAll(',', '.'));
+    final salinity =
+        double.tryParse(_salinityController.text.trim().replaceAll(',', '.'));
+    final temperature = double.tryParse(
+        _temperatureController.text.trim().replaceAll(',', '.'));
+
+    if (ph == null ||
+        tds == null ||
+        ec == null ||
+        salinity == null ||
+        temperature == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please fill all 5 water quality parameters (pH, TDS, EC, Salinity, Temperature).',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (ph < 0 || ph > 14) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('pH value must be between 0 and 14.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (temperature < 0 || temperature > 55) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Temperature must be between 0 and 55 °C.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (tds < 0 || ec < 0 || salinity < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('TDS, EC, and Salinity cannot be negative values.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final analysis = FishWaterAiService.analyze(
+      ph: ph,
+      tds: tds,
+      ec: ec,
+      salinity: salinity,
+      temperature: temperature,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FishWaterAnalysisReportPage(
+          analysis: analysis,
+        ),
+      ),
+    );
   }
 
   @override
@@ -1158,48 +1234,103 @@ class _DataEntryState extends State<DataEntry>
   }
 
   Widget _buildSubmitButton() {
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.white, Colors.blue.shade100]),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          height: 54,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [Colors.white, Colors.blue.shade100]),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _isLoading ? null : _handleSubmit,
-          borderRadius: BorderRadius.circular(12),
-          child: _isLoading
-              ? const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _isLoading ? null : _handleSubmit,
+              borderRadius: BorderRadius.circular(14),
+              child: _isLoading
+                  ? const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                        ),
+                      ),
+                    )
+                  : const Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.water_drop, color: Colors.blue, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Analyze Potable Drinking Water',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                )
-              : const Center(
-                  child: Text(
-                    'Submit Data',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
+            ),
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          height: 54,
+          decoration: BoxDecoration(
+            color: const Color(0xFF00E676),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00E676).withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _isLoading ? null : _handleFishWaterSubmit,
+              borderRadius: BorderRadius.circular(14),
+              child: const Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.phishing_rounded,
+                      color: Color(0xFF003554),
+                      size: 22,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Analyze as Fish Water (Action Plan)',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF003554),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

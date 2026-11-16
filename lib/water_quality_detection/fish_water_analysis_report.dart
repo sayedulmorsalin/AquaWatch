@@ -1,8 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:aquawatch/services/fish_water_ai_service.dart';
-import 'package:aquawatch/services/water_reading_service.dart';
 
 class FishScoreGaugePainter extends CustomPainter {
   final double score;
@@ -65,18 +63,10 @@ class FishScoreGaugePainter extends CustomPainter {
 
 class FishWaterAnalysisReportPage extends StatefulWidget {
   final FishWaterAiAnalysis analysis;
-  final double latitude;
-  final double longitude;
-  final bool locationCaptured;
-  final List<XFile> attachedImages;
 
   const FishWaterAnalysisReportPage({
     super.key,
     required this.analysis,
-    required this.latitude,
-    required this.longitude,
-    required this.locationCaptured,
-    required this.attachedImages,
   });
 
   @override
@@ -91,9 +81,7 @@ class _FishWaterAnalysisReportPageState
   late AnimationController _listController;
   late Animation<double> _gaugeAnim;
 
-  final WaterReadingService _readingService = WaterReadingService();
-  bool _isSaving = false;
-  bool _isSaved = false;
+  final Set<int> _checkedChecklistIndices = {};
 
   @override
   void initState() {
@@ -116,8 +104,6 @@ class _FishWaterAnalysisReportPageState
     Future.delayed(const Duration(milliseconds: 400), () {
       if (mounted) _listController.forward();
     });
-
-    _saveAnalysisToFirestore();
   }
 
   @override
@@ -125,79 +111,6 @@ class _FishWaterAnalysisReportPageState
     _gaugeController.dispose();
     _listController.dispose();
     super.dispose();
-  }
-
-  Future<void> _saveAnalysisToFirestore() async {
-    if (_isSaving || _isSaved) return;
-    setState(() => _isSaving = true);
-
-    try {
-      final analysis = widget.analysis;
-      final imagePaths = widget.attachedImages.map((e) => e.path).toList();
-
-      final parameterResults = analysis.parameterBreakdown
-          .map(
-            (p) => {
-              'name': p.name,
-              'symbol': p.symbol,
-              'unit': p.unit,
-              'value': p.value,
-              'safeRange': p.optimalRange,
-              'level': p.level.name,
-              'remark': p.remark,
-              'score': p.score,
-            },
-          )
-          .toList();
-
-      await _readingService.saveCommercialFishReading(
-        species: FishWaterAiService.speciesDatabase[analysis.species]?.commonName ??
-            analysis.species.name,
-        farmingSystem: _systemLabel(analysis.systemType),
-        pondName: analysis.pondName,
-        dissolvedOxygen: analysis.dissolvedOxygen,
-        ph: analysis.ph,
-        temperature: analysis.temperature,
-        ammonia: analysis.ammoniaTan,
-        unionizedAmmonia: analysis.unionizedAmmoniaNh3,
-        nitrite: analysis.nitrite,
-        tds: analysis.tds,
-        ec: analysis.ec,
-        salinity: analysis.salinity,
-        transparency: analysis.transparency,
-        latitude: widget.latitude,
-        longitude: widget.longitude,
-        imagePaths: imagePaths,
-        overallQuality: analysis.overallStatusLabel,
-        overallScore: analysis.overallScore,
-        overallSummary: analysis.executiveSummary,
-        aerationAdvisory: analysis.aerationAdvisory,
-        feedingAdvisory: analysis.feedingAdvisory,
-        pondTreatmentAdvisory: analysis.pondTreatmentAdvisory,
-        parameterResults: parameterResults,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-        _isSaved = true;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.locationCaptured
-                ? 'Commercial fish analysis & location saved successfully.'
-                : 'Commercial fish analysis saved (without GPS).',
-          ),
-          backgroundColor: Colors.teal.shade700,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      // Non-fatal if offline or not logged in
-    }
   }
 
   Color _tierColor(FishQualityLevel level) {
@@ -232,20 +145,18 @@ class _FishWaterAnalysisReportPageState
   Widget build(BuildContext context) {
     final analysis = widget.analysis;
     final primaryColor = _tierColor(analysis.overallQuality);
-    final speciesInfo =
-        FishWaterAiService.speciesDatabase[analysis.species]!;
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF051923),
-              const Color(0xFF003554),
-              const Color(0xFF006494),
-              const Color(0xFF0582CA),
+              Color(0xFF051923),
+              Color(0xFF003554),
+              Color(0xFF006494),
+              Color(0xFF0582CA),
             ],
           ),
         ),
@@ -259,44 +170,31 @@ class _FishWaterAnalysisReportPageState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildHeaderCard(speciesInfo),
+                      _buildHeaderCard(),
                       const SizedBox(height: 16),
                       _buildScoreGaugeCard(primaryColor),
                       const SizedBox(height: 16),
+                      _buildWhatToDoHeroCard(primaryColor),
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('What To Do With This Fish Water (Action Steps)'),
+                      const SizedBox(height: 10),
+                      ...analysis.actionSteps.map(_buildActionStepCard),
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('Best Fish Species for This Water'),
+                      const SizedBox(height: 10),
+                      ...analysis.speciesMatches.map(_buildSpeciesMatchCard),
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('Pre-Stocking Pond Preparation Checklist'),
+                      const SizedBox(height: 10),
+                      _buildPreStockingChecklist(),
+                      const SizedBox(height: 20),
                       _buildRealtimeChemicalCard(),
-                      const SizedBox(height: 16),
-                      _buildSectionTitle('AI Commercial Advisories'),
-                      const SizedBox(height: 10),
-                      _buildAdvisoryCard(
-                        title: 'AI Aeration Schedule & Control',
-                        subtitle: analysis.aerationAdvisory,
-                        icon: Icons.air_rounded,
-                        color: const Color(0xFF4FC3F7),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildAdvisoryCard(
-                        title: 'AI Feeding Rate Adjustment',
-                        subtitle: analysis.feedingAdvisory,
-                        icon: Icons.restaurant_rounded,
-                        color: const Color(0xFFFFB74D),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildAdvisoryCard(
-                        title: 'AI Pond Treatment & Water Management',
-                        subtitle: analysis.pondTreatmentAdvisory,
-                        icon: Icons.sanitizer_rounded,
-                        color: const Color(0xFF81C784),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildSectionTitle('Disease & Toxicity Risk Matrix'),
-                      const SizedBox(height: 10),
-                      _buildRiskMatrixCard(),
-                      const SizedBox(height: 16),
-                      _buildSectionTitle('Parameter Breakdown (Fish Criteria)'),
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('Water Quality Parameter Breakdown'),
                       const SizedBox(height: 10),
                       ...analysis.parameterBreakdown.map(_buildParameterCard),
                       const SizedBox(height: 20),
-                      _buildSaveStatusBanner(),
+                      _buildAdvisoryPrivacyNote(),
                     ],
                   ),
                 ),
@@ -323,7 +221,7 @@ class _FishWaterAnalysisReportPageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Fish Water AI Report',
+                  'Fish Water Action Report',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -331,30 +229,21 @@ class _FishWaterAnalysisReportPageState
                   ),
                 ),
                 Text(
-                  'Commercial Aquaculture Intelligence',
+                  'What To Do With This Fish Water',
                   style: TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               ],
             ),
           ),
-          if (_isSaving)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          else if (_isSaved)
-            const Icon(Icons.cloud_done_rounded, color: Color(0xFF00E676)),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderCard(SpeciesWaterCriteria speciesInfo) {
+  Widget _buildHeaderCard() {
     final analysis = widget.analysis;
+    final speciesInfo = FishWaterAiService.speciesDatabase[analysis.species]!;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -415,10 +304,9 @@ class _FishWaterAnalysisReportPageState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_systemLabel(analysis.systemType)} • ${speciesInfo.scientificName}',
+                  '${_systemLabel(analysis.systemType)} • Commercial Advisory',
                   style: TextStyle(
                     fontSize: 12,
-                    fontStyle: FontStyle.italic,
                     color: Colors.white.withValues(alpha: 0.75),
                   ),
                 ),
@@ -451,7 +339,7 @@ class _FishWaterAnalysisReportPageState
       child: Column(
         children: [
           const Text(
-            'COMMERCIAL FISH WATER QUALITY INDEX (CFWQI)',
+            'FISH WATER QUALITY INDEX (FWQI)',
             style: TextStyle(
               fontSize: 11,
               letterSpacing: 1.1,
@@ -461,7 +349,7 @@ class _FishWaterAnalysisReportPageState
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 150,
+            height: 140,
             child: AnimatedBuilder(
               animation: _gaugeAnim,
               builder: (context, _) {
@@ -470,21 +358,21 @@ class _FishWaterAnalysisReportPageState
                   alignment: Alignment.center,
                   children: [
                     CustomPaint(
-                      size: const Size(260, 150),
+                      size: const Size(260, 140),
                       painter: FishScoreGaugePainter(
                         score: curScore,
                         color: primaryColor,
                       ),
                     ),
                     Positioned(
-                      bottom: 24,
+                      bottom: 18,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             '${(curScore * 100).round()}',
                             style: const TextStyle(
-                              fontSize: 48,
+                              fontSize: 44,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: -1,
@@ -523,17 +411,274 @@ class _FishWaterAnalysisReportPageState
               ),
             ),
           ),
-          const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWhatToDoHeroCard(Color primaryColor) {
+    final analysis = widget.analysis;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: primaryColor, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.assignment_turned_in_rounded, color: primaryColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  analysis.fishUsabilityVerdict,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: primaryColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Text(
-            analysis.executiveSummary,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
+            analysis.whatToDoOverview,
+            style: const TextStyle(
+              fontSize: 13.5,
               height: 1.45,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        letterSpacing: 0.3,
+      ),
+    );
+  }
+
+  Widget _buildActionStepCard(ActionPlanStep step) {
+    Color badgeColor = const Color(0xFF00E676);
+    IconData icon = Icons.check_circle_outline;
+
+    if (step.urgency == 'Immediate') {
+      badgeColor = const Color(0xFFFF5252);
+      icon = Icons.priority_high_rounded;
+    } else if (step.urgency == 'Recommended') {
+      badgeColor = const Color(0xFFFFB74D);
+      icon = Icons.lightbulb_outline_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: badgeColor, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  step.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
+                ),
+                child: Text(
+                  step.urgency.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            step.description,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.42,
               color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSpeciesMatchCard(FishSpeciesMatch match) {
+    Color matchColor = const Color(0xFF00E676);
+    if (match.compatibilityPercent < 50) {
+      matchColor = const Color(0xFFFF5252);
+    } else if (match.compatibilityPercent < 75) {
+      matchColor = const Color(0xFFFFB74D);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  match.commonName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                '${match.compatibilityPercent}% Match',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: matchColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: match.compatibilityPercent / 100.0,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation<Color>(matchColor),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            match.reason,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: Colors.white.withValues(alpha: 0.75),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreStockingChecklist() {
+    final checklist = [
+      'Maintain adequate pond water depth (ideal 3.5 – 5.0 feet).',
+      'If pH is below 6.8, broadcast recommended agricultural lime 48 hours before stocking.',
+      'Pre-aerate the pond for 12 hours before introducing seed / fry.',
+      'Float transport fish bags in pond water for 25–30 minutes to equalize temperature before releasing.',
+      'Test dissolved oxygen early in the morning (5:30 AM) to verify night stability.',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        children: checklist.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final isChecked = _checkedChecklistIndices.contains(idx);
+
+          return InkWell(
+            onTap: () {
+              setState(() {
+                if (isChecked) {
+                  _checkedChecklistIndices.remove(idx);
+                } else {
+                  _checkedChecklistIndices.add(idx);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isChecked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                    color: isChecked ? const Color(0xFF00E676) : Colors.white60,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        decoration: isChecked ? TextDecoration.lineThrough : null,
+                        color: isChecked ? Colors.white54 : Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -567,7 +712,7 @@ class _FishWaterAnalysisReportPageState
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Smart Chemical Equilibrium AI',
+                  'Chemical Equilibrium & Oxygen Balance',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -584,7 +729,7 @@ class _FishWaterAnalysisReportPageState
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  isNh3Safe ? 'NH₃ SAFE' : 'NH₃ TOXIC HAZARD',
+                  isNh3Safe ? 'SAFE' : 'TOXIC RISK',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -596,7 +741,7 @@ class _FishWaterAnalysisReportPageState
           ),
           const SizedBox(height: 10),
           Text(
-            'Based on aqueous temperature (${analysis.temperature.toStringAsFixed(1)}°C) and pH (${analysis.ph.toStringAsFixed(2)}), the AI determined that ${analysis.ammoniaTan.toStringAsFixed(2)} mg/L Total Ammonia (TAN) produces:',
+            'At water temp ${analysis.temperature.toStringAsFixed(1)}°C and pH ${analysis.ph.toStringAsFixed(2)}, oxygen saturation capacity is ${analysis.estimatedOxygenSaturation} mg/L. Un-ionized toxic free ammonia (NH₃) is estimated at:',
             style: TextStyle(
               fontSize: 12,
               color: Colors.white.withValues(alpha: 0.8),
@@ -636,9 +781,9 @@ class _FishWaterAnalysisReportPageState
                 ),
                 Column(
                   children: [
-                    const Text(
-                      'Target DO Min',
-                      style: TextStyle(fontSize: 11, color: Colors.white60),
+                    Text(
+                      analysis.isEstimatedDo ? 'Theoretical DO' : 'Measured DO',
+                      style: const TextStyle(fontSize: 11, color: Colors.white60),
                     ),
                     Text(
                       '${analysis.dissolvedOxygen.toStringAsFixed(1)} mg/L',
@@ -655,138 +800,6 @@ class _FishWaterAnalysisReportPageState
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
-        letterSpacing: 0.3,
-      ),
-    );
-  }
-
-  Widget _buildAdvisoryCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.4,
-                    color: Colors.white.withValues(alpha: 0.88),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRiskMatrixCard() {
-    final analysis = widget.analysis;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        children: [
-          _buildRiskRow('Hypoxia Suffocation', analysis.hypoxiaRisk, Icons.air_rounded),
-          const Divider(color: Colors.white12, height: 16),
-          _buildRiskRow('Ammonia Toxicosis', analysis.ammoniaToxicityRisk, Icons.warning_amber_rounded),
-          const Divider(color: Colors.white12, height: 16),
-          _buildRiskRow('Nitrite (Brown Blood)', analysis.nitriteRisk, Icons.water_drop_rounded),
-          const Divider(color: Colors.white12, height: 16),
-          _buildRiskRow('Pathogen Vulnerability', analysis.bacterialDiseaseRisk, Icons.bug_report_rounded),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRiskRow(String label, String value, IconData icon) {
-    Color riskColor = const Color(0xFF00E676);
-    if (value.toLowerCase().contains('danger') ||
-        value.toLowerCase().contains('severe') ||
-        value.toLowerCase().contains('extreme') ||
-        value.toLowerCase().contains('high')) {
-      riskColor = const Color(0xFFFF5252);
-    } else if (value.toLowerCase().contains('moderate') ||
-        value.toLowerCase().contains('elevated')) {
-      riskColor = const Color(0xFFFFB74D);
-    }
-
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: riskColor),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: Colors.white70,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: riskColor,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -886,27 +899,28 @@ class _FishWaterAnalysisReportPageState
     );
   }
 
-  Widget _buildSaveStatusBanner() {
+  Widget _buildAdvisoryPrivacyNote() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _isSaved ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+            Icons.shield_outlined,
             size: 16,
-            color: _isSaved ? const Color(0xFF00E676) : Colors.white70,
+            color: Color(0xFF00E676),
           ),
-          const SizedBox(width: 8),
-          Text(
-            _isSaved
-                ? 'Report synced to AquaWatch Cloud Monitoring.'
-                : 'Saving report to AquaWatch Database...',
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Private advisory: no fish water data, location, or images are saved or transmitted.',
+              style: TextStyle(fontSize: 11.5, color: Colors.white70),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),

@@ -94,12 +94,46 @@ class FishParameterResult {
   });
 }
 
+/// Species compatibility result for any tested water sample.
+class FishSpeciesMatch {
+  final CommercialFishSpecies species;
+  final String commonName;
+  final int compatibilityPercent; // 0 to 100
+  final String verdict; // e.g. "Optimal Match", "Tolerable", "Unsuitable"
+  final String reason;
+
+  const FishSpeciesMatch({
+    required this.species,
+    required this.commonName,
+    required this.compatibilityPercent,
+    required this.verdict,
+    required this.reason,
+  });
+}
+
+/// Action item on what to do with the fish water.
+class ActionPlanStep {
+  final String title;
+  final String description;
+  final String urgency; // "Immediate", "Recommended", "Routine"
+  final String category; // "pH & Liming", "Aeration", "Feeding", "Water Conditioning"
+
+  const ActionPlanStep({
+    required this.title,
+    required this.description,
+    required this.urgency,
+    required this.category,
+  });
+}
+
 /// Complete AI diagnostic result for commercial fish water monitoring.
 class FishWaterAiAnalysis {
   final CommercialFishSpecies species;
   final FarmingSystemType systemType;
   final String pondName;
   final double dissolvedOxygen;
+  final bool isEstimatedDo;
+  final double estimatedOxygenSaturation;
   final double ph;
   final double temperature;
   final double ammoniaTan;
@@ -113,6 +147,8 @@ class FishWaterAiAnalysis {
   final int overallScore; // 0 to 100
   final FishQualityLevel overallQuality;
   final String overallStatusLabel;
+  final String fishUsabilityVerdict;
+  final String whatToDoOverview;
   final String executiveSummary;
 
   final String aerationAdvisory;
@@ -125,12 +161,16 @@ class FishWaterAiAnalysis {
   final String bacterialDiseaseRisk;
 
   final List<FishParameterResult> parameterBreakdown;
+  final List<FishSpeciesMatch> speciesMatches;
+  final List<ActionPlanStep> actionSteps;
 
   const FishWaterAiAnalysis({
     required this.species,
     required this.systemType,
     required this.pondName,
     required this.dissolvedOxygen,
+    required this.isEstimatedDo,
+    required this.estimatedOxygenSaturation,
     required this.ph,
     required this.temperature,
     required this.ammoniaTan,
@@ -143,6 +183,8 @@ class FishWaterAiAnalysis {
     required this.overallScore,
     required this.overallQuality,
     required this.overallStatusLabel,
+    required this.fishUsabilityVerdict,
+    required this.whatToDoOverview,
     required this.executiveSummary,
     required this.aerationAdvisory,
     required this.feedingAdvisory,
@@ -152,6 +194,8 @@ class FishWaterAiAnalysis {
     required this.nitriteRisk,
     required this.bacterialDiseaseRisk,
     required this.parameterBreakdown,
+    required this.speciesMatches,
+    required this.actionSteps,
   });
 }
 
@@ -308,7 +352,6 @@ class FishWaterAiService {
     required double temperatureCelsius,
   }) {
     if (tan <= 0) return 0.0;
-    // pKa formula for ammonia in water
     final double kelvin = temperatureCelsius + 273.15;
     final double pKa = 0.09018 + (2729.92 / kelvin);
     final double denominator = 1.0 + math.pow(10, pKa - ph);
@@ -319,40 +362,50 @@ class FishWaterAiService {
 
   /// Calculates theoretical Dissolved Oxygen 100% saturation at sea level for water temp.
   static double calculateOxygenSaturation(double temperatureCelsius) {
-    // Standard Weiss formula approximation
     final t = temperatureCelsius;
     return 14.652 - (0.41022 * t) + (0.007991 * t * t) - (0.000077774 * t * t * t);
   }
 
   /// Analyzes fish pond water quality comprehensively using biological modeling.
+  /// Works seamlessly with the standard 5 potable testing parameters (pH, TDS, EC, Salinity, Temperature),
+  /// with optional aquaculture additions (DO, TAN, Nitrite, Transparency).
   static FishWaterAiAnalysis analyze({
-    required CommercialFishSpecies species,
-    required FarmingSystemType systemType,
-    required String pondName,
-    required double dissolvedOxygen,
+    CommercialFishSpecies species = CommercialFishSpecies.generalPond,
+    FarmingSystemType systemType = FarmingSystemType.earthenPond,
+    String pondName = 'Commercial Fish Pond',
     required double ph,
-    required double temperature,
-    required double ammoniaTan,
-    double? nitrite,
-    required double salinity,
     required double tds,
     required double ec,
+    required double salinity,
+    required double temperature,
+    double? dissolvedOxygen,
+    double? ammoniaTan,
+    double? nitrite,
     double? transparency,
   }) {
     final criteria = speciesDatabase[species] ?? speciesDatabase[CommercialFishSpecies.generalPond]!;
 
+    // If DO is not explicitly measured, estimate typical well-circulated pond daytime DO (80% of saturation)
+    final double oxygenSaturation = calculateOxygenSaturation(temperature);
+    final bool isEstimatedDo = dissolvedOxygen == null;
+    final double effectiveDo = dissolvedOxygen ??
+        double.parse((oxygenSaturation * 0.80).toStringAsFixed(2));
+
+    // If TAN is not provided, estimate normal pond baseline (0.3 mg/L)
+    final double effectiveTan = ammoniaTan ?? 0.30;
+
     // Calculate un-ionized toxic NH3 fraction
     final nh3 = calculateUnionizedAmmonia(
-      tan: ammoniaTan,
+      tan: effectiveTan,
       ph: ph,
       temperatureCelsius: temperature,
     );
 
     // 1. Dissolved Oxygen Analysis (Weight: 32%)
-    final doResult = _analyzeDissolvedOxygen(dissolvedOxygen, criteria);
+    final doResult = _analyzeDissolvedOxygen(effectiveDo, criteria, isEstimated: isEstimatedDo);
 
     // 2. Toxic Ammonia & TAN Analysis (Weight: 24%)
-    final nh3Result = _analyzeAmmonia(nh3, ammoniaTan, criteria);
+    final nh3Result = _analyzeAmmonia(nh3, effectiveTan, criteria);
 
     // 3. pH Level Analysis (Weight: 18%)
     final phResult = _analyzePh(ph, criteria);
@@ -386,7 +439,7 @@ class FishWaterAiService {
         (salinityResult.score * 12.0);
 
     // Penalty for critical single parameters
-    if (dissolvedOxygen < criteria.criticalDo) {
+    if (effectiveDo < criteria.criticalDo) {
       weightedScore = math.min(weightedScore, 34.0);
     }
     if (nh3 > criteria.maxSafeNh3 * 2.5) {
@@ -401,33 +454,64 @@ class FishWaterAiService {
     // Determine Quality Tier
     final FishQualityLevel overallQuality;
     final String statusLabel;
+    final String fishUsabilityVerdict;
+
     if (overallScore >= 85) {
       overallQuality = FishQualityLevel.optimal;
       statusLabel = 'Optimal for Commercial Growth';
+      fishUsabilityVerdict = 'SAFE & READY FOR FISH STOCKING';
     } else if (overallScore >= 70) {
       overallQuality = FishQualityLevel.favorable;
       statusLabel = 'Favorable & Stable Quality';
+      fishUsabilityVerdict = 'USABLE WITH ROUTINE MANAGEMENT';
     } else if (overallScore >= 50) {
       overallQuality = FishQualityLevel.moderateStress;
       statusLabel = 'Moderate Stress Warning';
+      fishUsabilityVerdict = 'CONDITIONING REQUIRED BEFORE STOCKING';
     } else if (overallScore >= 32) {
       overallQuality = FishQualityLevel.danger;
       statusLabel = 'Alert: Unsafe Fish Environment';
+      fishUsabilityVerdict = 'HIGH HAZARD: DO NOT STOCK FISH YET';
     } else {
       overallQuality = FishQualityLevel.critical;
       statusLabel = 'Emergency: Lethal Danger Hazard';
+      fishUsabilityVerdict = 'LETHAL WATER: IMMEDIATE TREATMENT REQUIRED';
     }
 
-    // AI Dynamic Advisories
-    final aerationAdvisory = _generateAerationAdvisory(
-      dissolvedOxygen: dissolvedOxygen,
-      criteria: criteria,
+    // Generate Species Matching List
+    final speciesMatches = _calculateSpeciesMatches(
+      ph: ph,
       temperature: temperature,
+      salinity: salinity,
+      tds: tds,
+      dissolvedOxygen: effectiveDo,
+    );
+
+    // Generate Structured Action Steps ("What To Do With This Fish Water")
+    final actionSteps = _generateActionPlanSteps(
+      ph: ph,
+      temperature: temperature,
+      salinity: salinity,
+      tds: tds,
+      dissolvedOxygen: effectiveDo,
+      nh3: nh3,
+      overallQuality: overallQuality,
+      species: criteria.commonName,
       systemType: systemType,
     );
 
+    // AI Dynamic Advisories
+    final aerationAdvisory = _generateAerationAdvisory(
+      dissolvedOxygen: effectiveDo,
+      criteria: criteria,
+      temperature: temperature,
+      systemType: systemType,
+      isEstimated: isEstimatedDo,
+      oxygenSaturation: oxygenSaturation,
+    );
+
     final feedingAdvisory = _generateFeedingAdvisory(
-      dissolvedOxygen: dissolvedOxygen,
+      dissolvedOxygen: effectiveDo,
       nh3: nh3,
       temperature: temperature,
       criteria: criteria,
@@ -436,16 +520,16 @@ class FishWaterAiService {
     final pondTreatmentAdvisory = _generatePondTreatmentAdvisory(
       ph: ph,
       nh3: nh3,
-      ammoniaTan: ammoniaTan,
+      ammoniaTan: effectiveTan,
       nitrite: nitrite,
       systemType: systemType,
       criteria: criteria,
     );
 
     // Risk Indicators
-    final hypoxiaRisk = dissolvedOxygen < criteria.criticalDo
+    final hypoxiaRisk = effectiveDo < criteria.criticalDo
         ? 'Extreme Hypoxia (Surface Gasping Likely)'
-        : (dissolvedOxygen < criteria.optimalDoMin ? 'Moderate Sub-lethal Deficit' : 'Safe / Oxygen Saturated');
+        : (effectiveDo < criteria.optimalDoMin ? 'Moderate Sub-lethal Deficit' : 'Safe / Oxygen Saturated');
 
     final ammoniaRisk = nh3 > criteria.maxSafeNh3 * 2.0
         ? 'Severe Toxicosis (Gill Damage & Mortality)'
@@ -457,14 +541,21 @@ class FishWaterAiService {
             ? 'High Brown Blood Disease Risk'
             : (nitrite > criteria.maxSafeNitrite ? 'Moderate Methemoglobin Risk' : 'Safe Nitrite Level'));
 
-    final bacterialRisk = (temperature > criteria.optimalTempMax && ammoniaTan > criteria.maxSafeTan)
+    final bacterialRisk = (temperature > criteria.optimalTempMax && effectiveTan > criteria.maxSafeTan)
         ? 'High Aeromonas / Columnaris Vulnerability'
         : (overallScore < 60 ? 'Moderate Pathogen Susceptibility' : 'Low Infection Risk');
+
+    final whatToDoOverview = _generateWhatToDoOverview(
+      overallQuality: overallQuality,
+      ph: ph,
+      temperature: temperature,
+      salinity: salinity,
+    );
 
     final executiveSummary = _generateExecutiveSummary(
       species: criteria.commonName,
       quality: overallQuality,
-      doValue: dissolvedOxygen,
+      doValue: effectiveDo,
       nh3Value: nh3,
       phValue: ph,
     );
@@ -472,11 +563,13 @@ class FishWaterAiService {
     return FishWaterAiAnalysis(
       species: species,
       systemType: systemType,
-      pondName: pondName.trim().isEmpty ? 'Commercial Pond #1' : pondName.trim(),
-      dissolvedOxygen: dissolvedOxygen,
+      pondName: pondName.trim().isEmpty ? 'Commercial Fish Pond' : pondName.trim(),
+      dissolvedOxygen: effectiveDo,
+      isEstimatedDo: isEstimatedDo,
+      estimatedOxygenSaturation: double.parse(oxygenSaturation.toStringAsFixed(2)),
       ph: ph,
       temperature: temperature,
-      ammoniaTan: ammoniaTan,
+      ammoniaTan: effectiveTan,
       unionizedAmmoniaNh3: nh3,
       nitrite: nitrite,
       salinity: salinity,
@@ -486,6 +579,8 @@ class FishWaterAiService {
       overallScore: overallScore,
       overallQuality: overallQuality,
       overallStatusLabel: statusLabel,
+      fishUsabilityVerdict: fishUsabilityVerdict,
+      whatToDoOverview: whatToDoOverview,
       executiveSummary: executiveSummary,
       aerationAdvisory: aerationAdvisory,
       feedingAdvisory: feedingAdvisory,
@@ -495,55 +590,59 @@ class FishWaterAiService {
       nitriteRisk: nitriteRisk,
       bacterialDiseaseRisk: bacterialRisk,
       parameterBreakdown: breakdown,
+      speciesMatches: speciesMatches,
+      actionSteps: actionSteps,
     );
   }
 
   static FishParameterResult _analyzeDissolvedOxygen(
     double doValue,
-    SpeciesWaterCriteria criteria,
-  ) {
+    SpeciesWaterCriteria criteria, {
+    bool isEstimated = false,
+  }) {
+    final prefix = isEstimated ? '(Est.) ' : '';
     if (doValue >= criteria.optimalDoMin && doValue <= criteria.optimalDoMax) {
       return FishParameterResult(
-        name: 'Dissolved Oxygen',
+        name: 'Dissolved Oxygen (DO)',
         symbol: 'DO',
         unit: 'mg/L',
         value: doValue,
         optimalRange: '${criteria.optimalDoMin} – ${criteria.optimalDoMax} mg/L',
         level: FishQualityLevel.optimal,
-        remark: 'Optimal oxygen concentration for maximal feeding and growth vigor.',
+        remark: '${prefix}Optimal oxygen concentration for maximal feeding and growth vigor.',
         score: 1.0,
       );
     } else if (doValue > criteria.optimalDoMax) {
       return FishParameterResult(
-        name: 'Dissolved Oxygen',
+        name: 'Dissolved Oxygen (DO)',
         symbol: 'DO',
         unit: 'mg/L',
         value: doValue,
         optimalRange: '${criteria.optimalDoMin} – ${criteria.optimalDoMax} mg/L',
         level: FishQualityLevel.favorable,
-        remark: 'Super-saturation likely from intense daytime algae photosynthesis.',
+        remark: '${prefix}High oxygen concentration. Ensure adequate circulation during nighttime.',
         score: 0.88,
       );
     } else if (doValue >= criteria.criticalDo) {
       return FishParameterResult(
-        name: 'Dissolved Oxygen',
+        name: 'Dissolved Oxygen (DO)',
         symbol: 'DO',
         unit: 'mg/L',
         value: doValue,
         optimalRange: '${criteria.optimalDoMin} – ${criteria.optimalDoMax} mg/L',
         level: FishQualityLevel.moderateStress,
-        remark: 'Sub-optimal oxygen level. Fish appetite and disease resistance decrease.',
+        remark: '${prefix}Sub-optimal oxygen level. Supplemental mechanical aeration recommended.',
         score: 0.55,
       );
     } else {
       return FishParameterResult(
-        name: 'Dissolved Oxygen',
+        name: 'Dissolved Oxygen (DO)',
         symbol: 'DO',
         unit: 'mg/L',
         value: doValue,
         optimalRange: '${criteria.optimalDoMin} – ${criteria.optimalDoMax} mg/L',
         level: FishQualityLevel.critical,
-        remark: 'CRITICAL HYPOXIA: Fish suffocation hazard. Immediate aerator start required.',
+        remark: '${prefix}CRITICAL HYPOXIA: Fish suffocation hazard. Immediate aerator start required.',
         score: 0.15,
       );
     }
@@ -560,9 +659,9 @@ class FishWaterAiService {
         symbol: 'NH₃',
         unit: 'mg/L',
         value: nh3,
-        optimalRange: '< ${criteria.maxSafeNh3} mg/L (TAN < ${criteria.maxSafeTan})',
+        optimalRange: '< ${criteria.maxSafeNh3} mg/L',
         level: FishQualityLevel.optimal,
-        remark: 'Very low toxic ammonia. Gill epithelium and blood chemistry are safe.',
+        remark: 'Low toxic free ammonia. Fish gills and respiratory epithelium are in safe condition.',
         score: 1.0,
       );
     } else if (nh3 <= criteria.maxSafeNh3) {
@@ -573,7 +672,7 @@ class FishWaterAiService {
         value: nh3,
         optimalRange: '< ${criteria.maxSafeNh3} mg/L',
         level: FishQualityLevel.favorable,
-        remark: 'Safe commercial range. Keep monitoring feeding to avoid ammonia spikes.',
+        remark: 'Acceptable commercial range. Monitor feeding closely so unconsumed pellets do not decay.',
         score: 0.82,
       );
     } else if (nh3 <= criteria.maxSafeNh3 * 2.0) {
@@ -584,7 +683,7 @@ class FishWaterAiService {
         value: nh3,
         optimalRange: '< ${criteria.maxSafeNh3} mg/L',
         level: FishQualityLevel.moderateStress,
-        remark: 'Elevated toxic ammonia causes mild gill irritation and reduced feeding.',
+        remark: 'Elevated toxic ammonia. Causes gill irritation, reduced feeding, and stress.',
         score: 0.48,
       );
     } else {
@@ -595,7 +694,7 @@ class FishWaterAiService {
         value: nh3,
         optimalRange: '< ${criteria.maxSafeNh3} mg/L',
         level: FishQualityLevel.critical,
-        remark: 'DANGEROUS AMMONIA TOXICOSIS: High mortality risk. Cut feeding & flush water.',
+        remark: 'TOXIC AMMONIA RISK: High mortality hazard. Reduce feeding and exchange water.',
         score: 0.12,
       );
     }
@@ -613,7 +712,7 @@ class FishWaterAiService {
         value: ph,
         optimalRange: '${criteria.optimalPhMin} – ${criteria.optimalPhMax}',
         level: FishQualityLevel.optimal,
-        remark: 'Ideal alkaline balance for fish gill respiration and bio-filter nitrification.',
+        remark: 'Ideal balance (Golden Zone). Optimal gill respiration and nitrification cycle.',
         score: 1.0,
       );
     } else if ((ph >= criteria.optimalPhMin - 0.5 && ph < criteria.optimalPhMin) ||
@@ -626,8 +725,8 @@ class FishWaterAiService {
         optimalRange: '${criteria.optimalPhMin} – ${criteria.optimalPhMax}',
         level: FishQualityLevel.moderateStress,
         remark: ph < criteria.optimalPhMin
-            ? 'Slightly acidic. Check alkalinity and consider agricultural liming.'
-            : 'Slightly high pH. Amplifies toxic ammonia (NH3) percentage in warm water.',
+            ? 'Slightly acidic. Apply Agricultural Lime (CaCO3) to raise alkalinity.'
+            : 'Slightly alkaline. Increases proportion of toxic un-ionized ammonia (NH3).',
         score: 0.60,
       );
     } else if (ph < 6.0) {
@@ -638,7 +737,7 @@ class FishWaterAiService {
         value: ph,
         optimalRange: '${criteria.optimalPhMin} – ${criteria.optimalPhMax}',
         level: FishQualityLevel.critical,
-        remark: 'ACID STRESS: Damages fish gills and destroys nitrifying bacteria.',
+        remark: 'ACID WATER HAZARD: Corrodes fish gills and precipitates excess mucus.',
         score: 0.20,
       );
     } else {
@@ -649,7 +748,7 @@ class FishWaterAiService {
         value: ph,
         optimalRange: '${criteria.optimalPhMin} – ${criteria.optimalPhMax}',
         level: FishQualityLevel.critical,
-        remark: 'EXTREME ALKALINE: Corrodes gill filaments and turns harmless TAN into toxic NH3.',
+        remark: 'EXTREME ALKALINE HAZARD: Damages gill lamellae and magnifies ammonia toxicity.',
         score: 0.20,
       );
     }
@@ -667,7 +766,7 @@ class FishWaterAiService {
         value: temp,
         optimalRange: '${criteria.optimalTempMin} – ${criteria.optimalTempMax} °C',
         level: FishQualityLevel.optimal,
-        remark: 'Prime metabolic temperature for optimal feed conversion ratio (FCR).',
+        remark: 'Prime tropical growth temperature for maximum feed digestion and growth rate.',
         score: 1.0,
       );
     } else if ((temp >= criteria.optimalTempMin - 3.0 && temp < criteria.optimalTempMin) ||
@@ -680,8 +779,8 @@ class FishWaterAiService {
         optimalRange: '${criteria.optimalTempMin} – ${criteria.optimalTempMax} °C',
         level: FishQualityLevel.favorable,
         remark: temp < criteria.optimalTempMin
-            ? 'Cooler water; fish metabolism slows down slightly.'
-            : 'Warmer water; increases fish oxygen demand and toxic ammonia formation.',
+            ? 'Cooler water; fish digestive enzymes slow down.'
+            : 'Warm water; fish oxygen consumption doubles and ammonia production rises.',
         score: 0.75,
       );
     } else {
@@ -692,7 +791,7 @@ class FishWaterAiService {
         value: temp,
         optimalRange: '${criteria.optimalTempMin} – ${criteria.optimalTempMax} °C',
         level: FishQualityLevel.moderateStress,
-        remark: 'Thermal stress zone. Severely limits dissolved oxygen retention capacity.',
+        remark: 'Thermal stress zone. High temperature drops oxygen solubility sharply.',
         score: 0.35,
       );
     }
@@ -711,7 +810,7 @@ class FishWaterAiService {
         value: salinity,
         optimalRange: '${criteria.optimalSalinityMin} – ${criteria.optimalSalinityMax} ppt',
         level: FishQualityLevel.optimal,
-        remark: 'Osmotic pressure is balanced for minimal energy expenditure in fish osmoregulation.',
+        remark: 'Ideal osmotic equilibrium; minimal fish energy expended on osmoregulation.',
         score: 1.0,
       );
     } else if (salinity > criteria.optimalSalinityMax * 1.5) {
@@ -722,7 +821,7 @@ class FishWaterAiService {
         value: salinity,
         optimalRange: '${criteria.optimalSalinityMin} – ${criteria.optimalSalinityMax} ppt',
         level: FishQualityLevel.danger,
-        remark: 'High osmotic shock for freshwater fish species. Check saline intrusion.',
+        remark: 'High salinity for freshwater species. Osmotic dehydration stress.',
         score: 0.30,
       );
     } else {
@@ -751,7 +850,7 @@ class FishWaterAiService {
         value: nitrite,
         optimalRange: '< ${criteria.maxSafeNitrite} mg/L',
         level: FishQualityLevel.optimal,
-        remark: 'Safe nitrite level. Healthy fish blood oxygen binding capacity.',
+        remark: 'Safe nitrite level. Healthy blood hemoglobin oxygen capacity.',
         score: 1.0,
       );
     } else if (nitrite <= criteria.maxSafeNitrite * 2.5) {
@@ -762,7 +861,7 @@ class FishWaterAiService {
         value: nitrite,
         optimalRange: '< ${criteria.maxSafeNitrite} mg/L',
         level: FishQualityLevel.moderateStress,
-        remark: 'Elevated nitrite converts hemoglobin to methemoglobin (brown blood risk).',
+        remark: 'Elevated nitrite. May cause methemoglobinemia (brown blood disease).',
         score: 0.50,
       );
     } else {
@@ -816,18 +915,281 @@ class FishWaterAiService {
     }
   }
 
+  static List<FishSpeciesMatch> _calculateSpeciesMatches({
+    required double ph,
+    required double temperature,
+    required double salinity,
+    required double tds,
+    required double dissolvedOxygen,
+  }) {
+    final List<FishSpeciesMatch> matches = [];
+
+    for (final entry in speciesDatabase.entries) {
+      if (entry.key == CommercialFishSpecies.generalPond) continue;
+
+      final sp = entry.value;
+      double score = 100.0;
+      final List<String> reasons = [];
+
+      // pH penalty
+      if (ph < sp.optimalPhMin) {
+        final diff = sp.optimalPhMin - ph;
+        score -= diff * 25.0;
+        reasons.add('Water is too acidic for ${sp.commonName}');
+      } else if (ph > sp.optimalPhMax) {
+        final diff = ph - sp.optimalPhMax;
+        score -= diff * 30.0;
+        reasons.add('High pH increases toxic ammonia for ${sp.commonName}');
+      }
+
+      // Temp penalty
+      if (temperature < sp.optimalTempMin) {
+        final diff = sp.optimalTempMin - temperature;
+        score -= diff * 4.0;
+        reasons.add('Temperature is below ideal growth zone');
+      } else if (temperature > sp.optimalTempMax) {
+        final diff = temperature - sp.optimalTempMax;
+        score -= diff * 6.0;
+        reasons.add('Temperature is above ideal growth zone');
+      }
+
+      // Salinity penalty
+      if (salinity < sp.optimalSalinityMin) {
+        final diff = sp.optimalSalinityMin - salinity;
+        score -= diff * 4.0;
+        reasons.add('Salinity is too low (requires brackish water)');
+      } else if (salinity > sp.optimalSalinityMax) {
+        final diff = salinity - sp.optimalSalinityMax;
+        score -= diff * 8.0;
+        reasons.add('Salinity exceeds freshwater threshold');
+      }
+
+      // Dissolved Oxygen penalty
+      if (dissolvedOxygen < sp.criticalDo) {
+        score -= 40.0;
+        reasons.add('Critical oxygen shortage for this species');
+      } else if (dissolvedOxygen < sp.optimalDoMin) {
+        score -= 15.0;
+        reasons.add('Oxygen is below peak growth demand');
+      }
+
+      final int finalScore = score.round().clamp(5, 99);
+      final String verdict;
+      if (finalScore >= 85) {
+        verdict = 'Optimal Match';
+      } else if (finalScore >= 68) {
+        verdict = 'Good Compatibility';
+      } else if (finalScore >= 45) {
+        verdict = 'Tolerable with Caution';
+      } else {
+        verdict = 'Unsuitable';
+      }
+
+      final String summaryReason = reasons.isEmpty
+          ? 'Water parameters match ideal biological conditions.'
+          : reasons.join('; ');
+
+      matches.add(
+        FishSpeciesMatch(
+          species: entry.key,
+          commonName: sp.commonName,
+          compatibilityPercent: finalScore,
+          verdict: verdict,
+          reason: summaryReason,
+        ),
+      );
+    }
+
+    // Sort by compatibility descending
+    matches.sort((a, b) => b.compatibilityPercent.compareTo(a.compatibilityPercent));
+    return matches;
+  }
+
+  static List<ActionPlanStep> _generateActionPlanSteps({
+    required double ph,
+    required double temperature,
+    required double salinity,
+    required double tds,
+    required double dissolvedOxygen,
+    required double nh3,
+    required FishQualityLevel overallQuality,
+    required String species,
+    required FarmingSystemType systemType,
+  }) {
+    final List<ActionPlanStep> steps = [];
+
+    // 1. pH & Liming Action
+    if (ph < 6.5) {
+      final double deficit = (7.5 - ph);
+      final int doseKgPerDecimal = (deficit * 1.2).ceil().clamp(1, 3);
+      final int doseKgPerAcre = doseKgPerDecimal * 100;
+      steps.add(
+        ActionPlanStep(
+          title: 'Apply Agricultural Lime (CaCO₃)',
+          description:
+              'Water is acidic (pH $ph). Broadcast $doseKgPerDecimal kg per decimal (~$doseKgPerAcre kg/acre) of agricultural limestone across the pond surface in the morning. Re-test pH after 48 hours before stocking.',
+          urgency: 'Immediate',
+          category: 'pH & Liming',
+        ),
+      );
+    } else if (ph > 8.5) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Mitigate Alkaline pH / Ammonia Spike',
+          description:
+              'Water is alkaline (pH $ph). DO NOT add lime. Carry out a 15–20% partial water exchange with fresh tube-well water to lower pH and prevent toxic un-ionized ammonia (NH₃) formation.',
+          urgency: 'Immediate',
+          category: 'pH & Liming',
+        ),
+      );
+    } else {
+      steps.add(
+        ActionPlanStep(
+          title: 'pH is Balanced (Golden Zone)',
+          description:
+              'Water pH is $ph, which is within the safe 6.5–8.5 range. No corrective liming is required. Routine maintenance liming (0.5 kg/decimal every 2 months) can be followed.',
+          urgency: 'Routine',
+          category: 'pH & Liming',
+        ),
+      );
+    }
+
+    // 2. Aeration Action
+    if (dissolvedOxygen < 3.5) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Emergency Mechanical Aeration',
+          description:
+              'Dissolved oxygen is low ($dissolvedOxygen mg/L). Start all paddlewheel aerators or air blowers at 100% capacity right away. If fish are at surface, add fresh oxygenated water or emergency sodium percarbonate.',
+          urgency: 'Immediate',
+          category: 'Aeration',
+        ),
+      );
+    } else if (dissolvedOxygen < 5.0) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Scheduled Night-time Aeration',
+          description:
+              'Dissolved oxygen is moderate ($dissolvedOxygen mg/L). Run aerators for 6 hours nightly from 12:00 AM to 6:00 AM when algal photosynthesis halts and nocturnal respiration peaks.',
+          urgency: 'Recommended',
+          category: 'Aeration',
+        ),
+      );
+    } else {
+      steps.add(
+        ActionPlanStep(
+          title: 'Aeration Schedule is Optimal',
+          description:
+              'Oxygen level is healthy ($dissolvedOxygen mg/L). Keep standard aeration cycle: 2 hours around 1:00 PM for water de-stratification and 3 hours before dawn (3:00 AM–6:00 AM).',
+          urgency: 'Routine',
+          category: 'Aeration',
+        ),
+      );
+    }
+
+    // 3. Feeding Strategy Action
+    if (dissolvedOxygen < 3.5 || nh3 > 0.05) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Suspend / Cut Feeding Today',
+          description:
+              'Hold back feed by 50% to 100%. Digesting feed requires high metabolic oxygen. Feeding during oxygen or ammonia stress causes immediate fish mortality and severe water fouling.',
+          urgency: 'Immediate',
+          category: 'Feeding',
+        ),
+      );
+    } else if (temperature > 32.0 || temperature < 22.0) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Adjust Feeding Time & Ration',
+          description:
+              'Water temperature is ${temperature.toStringAsFixed(1)}°C. Reduce daily feed by 20–30%. In hot weather, feed only during cooler morning hours (7:30 AM) and evening (5:00 PM).',
+          urgency: 'Recommended',
+          category: 'Feeding',
+        ),
+      );
+    } else {
+      steps.add(
+        ActionPlanStep(
+          title: 'Feed at Normal Commercial Rate',
+          description:
+              'Water conditions are prime. Deliver full daily feed ration (2.5% to 3.5% of total estimated fish body weight), divided into 2 equal daily meals.',
+          urgency: 'Routine',
+          category: 'Feeding',
+        ),
+      );
+    }
+
+    // 4. Salinity & Water Conditioning Action
+    if (salinity > 3.0) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Salinity / Mineral Regulation',
+          description:
+              'Salinity is $salinity ppt. This water is slightly brackish. Highly suitable for Tilapia and Shrimp, but unsuitable for delicate Major Carp fry (Rui/Catla). Add fresh canal/well water if cultivating freshwater carp.',
+          urgency: 'Recommended',
+          category: 'Water Conditioning',
+        ),
+      );
+    } else if (tds > 1000.0) {
+      steps.add(
+        ActionPlanStep(
+          title: 'Bottom Sludge Siphon & Water Exchange',
+          description:
+              'Total Dissolved Solids are elevated ($tds ppm). Drain 20% bottom water and replace with fresh water to prevent mineral toxicity and gill clogging.',
+          urgency: 'Recommended',
+          category: 'Water Conditioning',
+        ),
+      );
+    } else {
+      steps.add(
+        ActionPlanStep(
+          title: 'Pre-Stocking Pond Acclimatization',
+          description:
+              'Water mineral balance is optimal ($tds ppm, $salinity ppt). Float seed bags in pond water for 25–30 minutes to equalize water temperature before releasing fingerlings into the pond.',
+          urgency: 'Routine',
+          category: 'Water Conditioning',
+        ),
+      );
+    }
+
+    return steps;
+  }
+
+  static String _generateWhatToDoOverview({
+    required FishQualityLevel overallQuality,
+    required double ph,
+    required double temperature,
+    required double salinity,
+  }) {
+    switch (overallQuality) {
+      case FishQualityLevel.optimal:
+        return 'This water is in EXCELLENT condition for commercial fish farming. Temperature ($temperature°C) and pH ($ph) are in the prime biological zone. You can stock fingerlings directly after 25 minutes of temperature acclimatization.';
+      case FishQualityLevel.favorable:
+        return 'This water is SAFE and ready for fish cultivation with routine management. Ensure regular night-time aeration and maintain standard feeding schedules.';
+      case FishQualityLevel.moderateStress:
+        return 'This water needs CONDITIONING before introducing new fish. Check the liming and aeration guidance below to bring pH and oxygen into the optimal zone before stocking.';
+      case FishQualityLevel.danger:
+      case FishQualityLevel.critical:
+        return 'DO NOT STOCK FISH in this water yet. Critical stress parameters were detected. Apply the recommended lime or water exchange treatment and re-test after 48 hours.';
+    }
+  }
+
   static String _generateAerationAdvisory({
     required double dissolvedOxygen,
     required SpeciesWaterCriteria criteria,
     required double temperature,
     required FarmingSystemType systemType,
+    bool isEstimated = false,
+    double oxygenSaturation = 7.8,
   }) {
+    final note = isEstimated ? ' (Estimated from temperature saturation capacity: ${oxygenSaturation.toStringAsFixed(1)} mg/L)' : '';
     if (dissolvedOxygen < criteria.criticalDo) {
-      return 'EMERGENCY AERATION ACTIVATION: DO is below critical threshold (${dissolvedOxygen.toStringAsFixed(1)} mg/L < ${criteria.criticalDo} mg/L). Start all mechanical aerators (paddlewheel / aspirator / blowers) at 100% capacity immediately. If fish are piping at surface, introduce fresh oxygenated well water or emergency sodium percarbonate.';
+      return 'EMERGENCY AERATION ACTIVATION: DO is below critical threshold (${dissolvedOxygen.toStringAsFixed(1)} mg/L). Start mechanical aerators (paddlewheels / blowers) at 100% capacity immediately.$note';
     } else if (dissolvedOxygen < criteria.optimalDoMin) {
-      return 'PROACTIVE AERATION SCHEDULE: DO is in the stress zone (${dissolvedOxygen.toStringAsFixed(1)} mg/L). Run aerators continuously from 11:00 PM to 7:00 AM when algal photosynthesis ceases and respiration consumes oxygen. Maintain continuous aeration in intensive Biofloc/RAS tanks.';
+      return 'PROACTIVE AERATION SCHEDULE: Run aerators continuously from 11:00 PM to 7:00 AM when photosynthesis ceases and nocturnal respiration consumes oxygen.$note';
     } else {
-      return 'AERATION OPTIMAL: Dissolved oxygen is healthy (${dissolvedOxygen.toStringAsFixed(1)} mg/L). Follow standard energy-saving schedule: operate aerators during mid-day destratification (12:00 PM - 2:00 PM) and late night (3:00 AM - 6:00 AM).';
+      return 'AERATION OPTIMAL: Dissolved oxygen is healthy (${dissolvedOxygen.toStringAsFixed(1)} mg/L). Follow standard energy-saving schedule: operate aerators during mid-day destratification and late night.$note';
     }
   }
 
@@ -838,15 +1200,15 @@ class FishWaterAiService {
     required SpeciesWaterCriteria criteria,
   }) {
     if (dissolvedOxygen < criteria.criticalDo) {
-      return 'SUSPEND FEEDING IMMEDIATELY: Digestion requires high specific dynamic action (SDA) oxygen consumption. Feeding during hypoxia will trigger rapid fish mortality and feed waste.';
+      return 'SUSPEND FEEDING IMMEDIATELY: Digestion consumes high metabolic oxygen. Feeding during hypoxia will trigger rapid fish mortality and feed waste.';
     } else if (nh3 > criteria.maxSafeNh3 * 1.8) {
-      return 'REDUCE FEED BY 60%: High toxic ammonia (${nh3.toStringAsFixed(3)} mg/L). Fish liver cannot process extra dietary protein. Switch to lower-protein feed or skip 1-2 feeding sessions.';
+      return 'REDUCE FEED BY 60%: High toxic ammonia (${nh3.toStringAsFixed(3)} mg/L). Switch to lower-protein feed or skip 1-2 feeding sessions.';
     } else if (dissolvedOxygen < criteria.optimalDoMin || nh3 > criteria.maxSafeNh3) {
-      return 'REDUCE FEED BY 25%: Sub-optimal environmental stress detected. Adjust ration size to maintain feed conversion ratio (FCR) and prevent uneaten feed from sinking.';
+      return 'REDUCE FEED BY 25%: Environmental stress detected. Adjust ration size to maintain feed conversion ratio (FCR) and prevent uneaten feed from sinking.';
     } else if (temperature > criteria.optimalTempMax + 2.0) {
-      return 'SHIFT FEEDING TIME: Water is very warm (${temperature.toStringAsFixed(1)} °C). Feed during cooler morning hours (7:30 - 9:00 AM) and late afternoon (5:00 PM).';
+      return 'SHIFT FEEDING TIME: Water is warm (${temperature.toStringAsFixed(1)} °C). Feed during cooler morning hours (7:30 AM) and late afternoon (5:00 PM).';
     } else {
-      return 'OPTIMAL FEEDING RATION: Water conditions are ideal. Deliver 100% daily feed allowance based on biomass calculation (e.g. 2.5 - 3.5% body weight).';
+      return 'OPTIMAL FEEDING RATION: Water conditions are ideal. Deliver 100% daily feed allowance based on biomass calculation (2.5 - 3.5% body weight).';
     }
   }
 
@@ -860,16 +1222,15 @@ class FishWaterAiService {
   }) {
     final List<String> actions = [];
 
-    // Liming / Buffering
     if (ph < 6.8) {
       final double deficit = (7.5 - ph);
       final int doseKgPerAcre = (deficit * 120).round().clamp(50, 250);
-      actions.add('LIMING: Apply agricultural limestone (CaCO3) at ~$doseKgPerAcre kg/acre to buffer alkalinity above 100 mg/L.');
+      final int doseKgPerDecimal = (doseKgPerAcre / 100).ceil();
+      actions.add('LIMING: Apply Agricultural Limestone (CaCO3) at $doseKgPerDecimal kg/decimal (~$doseKgPerAcre kg/acre) to restore buffer capacity.');
     } else if (ph > 8.8) {
       actions.add('ALKALINE BUFFER: High pH ($ph) accelerates toxic NH3 formation. Carry out a 15-20% partial water exchange; avoid adding quicklime.');
     }
 
-    // Ammonia mitigation
     if (nh3 > criteria.maxSafeNh3) {
       if (systemType == FarmingSystemType.biofloc) {
         actions.add('BIOFLOC CARBON DOSING: Add carbon source (Molasses or Rice Bran) targeting C:N ratio of 15:1 to stimulate heterotrophic ammonia assimilation.');
@@ -878,7 +1239,6 @@ class FishWaterAiService {
       }
     }
 
-    // Nitrite toxicity protection
     if (nitrite != null && nitrite > criteria.maxSafeNitrite) {
       actions.add('SALT INTERVENTION: Apply coarse aquaculture salt (NaCl) at 50-80 kg/acre. Chloride ions (Cl-) block nitrite absorption through fish gills.');
     }

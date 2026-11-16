@@ -4,7 +4,6 @@ import 'package:aquawatch/services/fish_water_ai_service.dart';
 void main() {
   group('FishWaterAiService Calculations & Modeling', () {
     test('calculateUnionizedAmmonia computes accurate Emerson equilibrium', () {
-      // At pH 8.0, 28°C, and TAN = 1.0 mg/L, NH3 should be around 0.06 - 0.08 mg/L
       final nh3 = FishWaterAiService.calculateUnionizedAmmonia(
         tan: 1.0,
         ph: 8.0,
@@ -28,7 +27,6 @@ void main() {
         temperatureCelsius: 28.0,
       );
 
-      // At pH 8.5, toxic ammonia is approximately 10x higher than at pH 7.0
       expect(nh3HighPh, greaterThan(nh3LowPh * 8));
     });
 
@@ -50,6 +48,56 @@ void main() {
       expect(analysis.overallQuality, equals(FishQualityLevel.optimal));
       expect(analysis.feedingAdvisory.toLowerCase(), contains('optimal'));
       expect(analysis.aerationAdvisory.toLowerCase(), contains('optimal'));
+      expect(analysis.fishUsabilityVerdict, contains('READY FOR FISH'));
+    });
+
+    test('Works seamlessly with only standard 5 potable parameters (pH, TDS, EC, Salinity, Temp)', () {
+      final analysis = FishWaterAiService.analyze(
+        ph: 7.5,
+        tds: 320.0,
+        ec: 540.0,
+        salinity: 0.4,
+        temperature: 28.0,
+      );
+
+      expect(analysis.isEstimatedDo, isTrue);
+      expect(analysis.dissolvedOxygen, greaterThan(5.0));
+      expect(analysis.estimatedOxygenSaturation, greaterThan(7.0));
+      expect(analysis.actionSteps, isNotEmpty);
+      expect(analysis.speciesMatches, isNotEmpty);
+      expect(analysis.whatToDoOverview, isNotEmpty);
+
+      // Verify that Tilapia is a strong match in 28°C freshwater
+      final tilapiaMatch = analysis.speciesMatches.firstWhere(
+        (m) => m.species == CommercialFishSpecies.tilapia,
+      );
+      expect(tilapiaMatch.compatibilityPercent, greaterThanOrEqualTo(85));
+    });
+
+    test('Acid water triggers agricultural lime recommendation in action steps', () {
+      final analysis = FishWaterAiService.analyze(
+        ph: 5.6, // Acidic water
+        tds: 200.0,
+        ec: 350.0,
+        salinity: 0.2,
+        temperature: 27.0,
+      );
+
+      expect(analysis.overallQuality, isIn([FishQualityLevel.moderateStress, FishQualityLevel.danger, FishQualityLevel.critical]));
+      expect(
+        analysis.fishUsabilityVerdict,
+        anyOf([
+          contains('CONDITIONING REQUIRED'),
+          contains('HAZARD'),
+          contains('LETHAL'),
+        ]),
+      );
+
+      final limeStep = analysis.actionSteps.firstWhere(
+        (s) => s.category == 'pH & Liming',
+      );
+      expect(limeStep.description.toLowerCase(), contains('lime'));
+      expect(limeStep.urgency, equals('Immediate'));
     });
 
     test('Critical hypoxia triggers emergency aeration and feeding suspension', () {
@@ -57,7 +105,7 @@ void main() {
         species: CommercialFishSpecies.majorCarp,
         systemType: FarmingSystemType.earthenPond,
         pondName: 'Carp Nursery',
-        dissolvedOxygen: 2.1, // Far below Carp critical threshold (3.8 mg/L)
+        dissolvedOxygen: 2.1,
         ph: 7.4,
         temperature: 28.0,
         ammoniaTan: 0.2,
@@ -81,7 +129,7 @@ void main() {
         dissolvedOxygen: 5.5,
         ph: 8.4,
         temperature: 30.0,
-        ammoniaTan: 2.2, // High ammonia
+        ammoniaTan: 2.2,
         salinity: 0.3,
         tds: 400.0,
         ec: 650.0,
